@@ -35,7 +35,7 @@
     "@overleaf/o-error": "^2.1.0",
     "@sentry/browser": "^5.12.0",
     "algoliasearch": "^3.35.1",
-    "angular": "~1.6.10",
+    "angular": "~1.7.9",
     "angular-sanitize": "~1.6.10",
     "archiver": "4.0.1",
     "async": "0.6.2",
