@@ -923,12 +923,12 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
   ) // this gets removed by admin-panel addon
   webRouter.get(
     '/admin/register',
-    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    // AuthorizationMiddleware.ensureUserIsSiteAdmin,
     AdminController.registerNewUser
   )
   webRouter.post(
     '/admin/register',
-    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    // AuthorizationMiddleware.ensureUserIsSiteAdmin,
     UserController.register
   )
   webRouter.post(
