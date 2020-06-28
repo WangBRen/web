@@ -84,6 +84,8 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
     AuthenticationController.addEndpointToLoginWhitelist('/register')
   }
 
+  webRouter.post('/register', UserController.register)
+
   EditorRouter.apply(webRouter, privateApiRouter)
   CollaboratorsRouter.apply(webRouter, privateApiRouter)
   SubscriptionRouter.apply(webRouter, privateApiRouter, publicApiRouter)
@@ -923,12 +925,12 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
   ) // this gets removed by admin-panel addon
   webRouter.get(
     '/admin/register',
-    // AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
     AdminController.registerNewUser
   )
   webRouter.post(
     '/admin/register',
-    // AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
     UserController.register
   )
   webRouter.post(
