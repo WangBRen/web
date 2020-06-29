@@ -27,6 +27,11 @@ else
 		user: undefined
 		pass: undefined
 
+intFromEnv = (name, defaultValue) ->
+	if defaultValue in [null, undefined] or typeof defaultValue != 'number'
+		throw new Error("Bad default integer value for setting: #{name}, #{defaultValue}")
+	parseInt(process.env[name], 10) || defaultValue
+
 module.exports = settings =
 
 	allowAnonymousReadAndWriteSharing:
@@ -190,13 +195,23 @@ module.exports = settings =
 	# that are sent out, generated links, etc.
 	siteUrl : siteUrl = process.env['PUBLIC_URL'] or 'http://localhost:3000'
 
+	lockManager:
+		lockTestInterval: intFromEnv('LOCK_MANAGER_LOCK_TEST_INTERVAL', 50)
+		maxTestInterval: intFromEnv('LOCK_MANAGER_MAX_TEST_INTERVAL', 1000)
+		maxLockWaitTime: intFromEnv('LOCK_MANAGER_MAX_LOCK_WAIT_TIME', 10000)
+		redisLockExpiry: intFromEnv('LOCK_MANAGER_REDIS_LOCK_EXPIRY', 30)
+		slowExecutionThreshold: intFromEnv('LOCK_MANAGER_SLOW_EXECUTION_THRESHOLD', 5000)
 
 	# Used to close the editor off to users
 	editorIsOpen: process.env['EDITOR_IS_OPEN'] or true
 	
 	# Optional separate location for websocket connections, if unset defaults to siteUrl.
 	wsUrl: process.env['WEBSOCKET_URL']
+	wsUrlV2: process.env['WEBSOCKET_URL_V2']
 	wsUrlBeta: process.env['WEBSOCKET_URL_BETA']
+
+	wsUrlV2Percentage: parseInt(process.env['WEBSOCKET_URL_V2_PERCENTAGE'] || '0', 10)
+	wsRetryHandshake: parseInt(process.env['WEBSOCKET_RETRY_HANDSHAKE'] || '5', 10)
 
 	# cookie domain
 	# use full domain for cookies to only be accessible from that domain,
@@ -220,13 +235,13 @@ module.exports = settings =
 	# --------
 	security:
 		sessionSecret: sessionSecret
-		bcryptRounds: if process.env['NODE_ENV'] == 'test' then 1 else 12 # number of rounds used to hash user passwords (raised to power 2)
+		bcryptRounds: (parseInt(process.env['BCRYPT_ROUNDS'], 10) || 12) # number of rounds used to hash user passwords (raised to power 2)
 
 	httpAuthUsers: httpAuthUsers
 
 	twoFactorAuthentication:
-		enabled: false
-		requiredForStaff: false
+		enabled: process.env['TWO_FACTOR_AUTHENTICATION_ENABLED'] == 'true'
+		requiredForStaff: process.env['TWO_FACTOR_AUTHENTICATION_REQUIRED_FOR_STAFF'] == 'true'
 
 	# Default features
 	# ----------------
@@ -370,17 +385,15 @@ module.exports = settings =
 	# tenderUrl: ""
 	#
 	# Client-side error logging is provided by getsentry.com
-	# sentry:
-	#   src: ""
+	sentry:
+		environment: process.env['SENTRY_ENVIRONMENT']
+		release: process.env['SENTRY_RELEASE']
 	#   publicDSN: ""
-	#
-	# src should be either a remote url like
-	#    //cdn.ravenjs.com/1.1.22/jquery,native/raven.min.js
-	# or a local file in the js/libs directory.
 	# The publicDSN is the token for the client-side getSentry service.
 
 	# Production Settings
 	# -------------------
+	debugPugTemplates: process.env['DEBUG_PUG_TEMPLATES'] == 'true'
 
 	# Should javascript assets be served minified or not. Note that you will
 	# need to run `grunt compile:minify` within the web-sharelatex directory
@@ -451,8 +464,8 @@ module.exports = settings =
 		# If we ever need to write something to disk (e.g. incoming requests
 		# that need processing but may be too big for memory, then write
 		# them to disk here).
-		dumpFolder: "/data/dumpFolder"
-		uploadFolder: "/data/uploads"
+		dumpFolder: "./data/dumpFolder"
+		uploadFolder: "./data/uploads"
 
 	# Automatic Snapshots
 	# -------------------

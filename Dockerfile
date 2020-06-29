@@ -1,15 +1,21 @@
-FROM node:10.19.0 as base
+FROM node:10.21.0 as base
 
 WORKDIR /app
 
 # install_deps changes app files and installs npm packages
 # as such it has to run at a later stage
 
-FROM base as app
+RUN apt-get update \
+&&  apt-get install -y parallel \
+&&  rm -rf /var/lib/apt/lists/*
+
+FROM base as deps
 
 COPY package.json package-lock.json /app/
 
-RUN npm install --quiet
+RUN npm ci --quiet
+
+FROM deps as app
 
 COPY . /app
 
@@ -38,3 +44,6 @@ RUN mkdir -p /app/data/dumpFolder && \
 USER node
 
 CMD ["node", "--expose-gc", "app.js"]
+
+ARG SENTRY_RELEASE
+ENV SENTRY_RELEASE=$SENTRY_RELEASE

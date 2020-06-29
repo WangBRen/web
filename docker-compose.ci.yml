@@ -16,12 +16,14 @@ services:
     image: ci/$PROJECT_NAME:$BRANCH_NAME-$BUILD_NUMBER
     working_dir: /app
     environment:
+      BCRYPT_ROUNDS: 1
       REDIS_HOST: redis
       MONGO_URL: "mongodb://mongo/sharelatex"
       SHARELATEX_ALLOW_PUBLIC_ACCESS: 'true'
       PROJECT_HISTORY_ENABLED: 'true'
       ENABLED_LINKED_FILE_TYPES: 'url,project_file,project_output_file,mendeley,zotero'
       LINKED_URL_PROXY: 'http://localhost:6543'
+      LOCK_MANAGER_MAX_LOCK_WAIT_TIME: 30000
       NODE_ENV: test
       SHARELATEX_CONFIG:
     command: npm run test:acceptance:app
@@ -47,7 +49,7 @@ services:
     image: ci/$PROJECT_NAME:$BRANCH_NAME-$BUILD_NUMBER
     volumes:
       - ./:/tmp/build/
-    command: tar -czf /tmp/build/build.tar.gz --exclude=build.tar.gz --exclude-vcs .
+    command: tar -cf /tmp/build/build.tar public/
     user: root
 
   redis:

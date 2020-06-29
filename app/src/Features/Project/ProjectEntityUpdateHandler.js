@@ -8,7 +8,6 @@ const { Doc } = require('../../models/Doc')
 const DocstoreManager = require('../Docstore/DocstoreManager')
 const DocumentUpdaterHandler = require('../../Features/DocumentUpdater/DocumentUpdaterHandler')
 const Errors = require('../Errors/Errors')
-const { File } = require('../../models/File')
 const FileStoreHandler = require('../FileStore/FileStoreHandler')
 const LockManager = require('../../infrastructure/LockManager')
 const { Project } = require('../../models/Project')
@@ -71,152 +70,6 @@ function wrapWithLock(methodWithoutLock) {
 }
 
 const ProjectEntityUpdateHandler = {
-  copyFileFromExistingProjectWithProject: wrapWithLock({
-    beforeLock(next) {
-      return function(
-        projectId,
-        project,
-        folderId,
-        originalProjectId,
-        originalFileRef,
-        userId,
-        callback
-      ) {
-        logger.log(
-          { projectId, folderId, originalProjectId, originalFileRef },
-          'copying file in s3 with project'
-        )
-        folderId = ProjectEntityMongoUpdateHandler._confirmFolder(
-          project,
-          folderId
-        )
-        if (originalFileRef == null) {
-          logger.err(
-            { projectId, folderId, originalProjectId, originalFileRef },
-            'file trying to copy is null'
-          )
-          return callback()
-        }
-        // convert any invalid characters in original file to '_'
-        const fileProperties = {
-          name: SafePath.clean(originalFileRef.name)
-        }
-        if (originalFileRef.linkedFileData != null) {
-          fileProperties.linkedFileData = originalFileRef.linkedFileData
-        }
-        if (originalFileRef.hash != null) {
-          fileProperties.hash = originalFileRef.hash
-        }
-        const fileRef = new File(fileProperties)
-        FileStoreHandler.copyFile(
-          originalProjectId,
-          originalFileRef._id,
-          project._id,
-          fileRef._id,
-          (err, fileStoreUrl) => {
-            if (err != null) {
-              logger.warn(
-                {
-                  err,
-                  projectId,
-                  folderId,
-                  originalProjectId,
-                  originalFileRef
-                },
-                'error coping file in s3'
-              )
-              return callback(err)
-            }
-            next(
-              projectId,
-              project,
-              folderId,
-              originalProjectId,
-              originalFileRef,
-              userId,
-              fileRef,
-              fileStoreUrl,
-              callback
-            )
-          }
-        )
-      }
-    },
-    withLock(
-      projectId,
-      project,
-      folderId,
-      originalProjectId,
-      originalFileRef,
-      userId,
-      fileRef,
-      fileStoreUrl,
-      callback
-    ) {
-      const projectHistoryId =
-        project.overleaf &&
-        project.overleaf.history &&
-        project.overleaf.history.id
-      ProjectEntityMongoUpdateHandler._putElement(
-        project,
-        folderId,
-        fileRef,
-        'file',
-        (err, result, newProject) => {
-          if (err != null) {
-            logger.warn(
-              { err, projectId, folderId },
-              'error putting element as part of copy'
-            )
-            return callback(err)
-          }
-          TpdsUpdateSender.addFile(
-            {
-              project_id: projectId,
-              file_id: fileRef._id,
-              path: result && result.path && result.path.fileSystem,
-              rev: fileRef.rev,
-              project_name: project.name
-            },
-            err => {
-              if (err != null) {
-                logger.err(
-                  {
-                    err,
-                    projectId,
-                    folderId,
-                    originalProjectId,
-                    originalFileRef
-                  },
-                  'error sending file to tpds worker'
-                )
-              }
-              const newFiles = [
-                {
-                  file: fileRef,
-                  path: result && result.path && result.path.fileSystem,
-                  url: fileStoreUrl
-                }
-              ]
-              DocumentUpdaterHandler.updateProjectStructure(
-                projectId,
-                projectHistoryId,
-                userId,
-                { newFiles, newProject },
-                error => {
-                  if (error != null) {
-                    return callback(error)
-                  }
-                  callback(null, fileRef, folderId)
-                }
-              )
-            }
-          )
-        }
-      )
-    }
-  }),
-
   updateDocLines(
     projectId,
     docId,
@@ -754,7 +607,7 @@ const ProjectEntityUpdateHandler = {
     }
     ProjectLocator.findElement(
       { project_id: projectId, element_id: folderId, type: 'folder' },
-      (error, folder, path) => {
+      (error, folder, folderPath) => {
         if (error != null) {
           return callback(error)
         }
@@ -767,6 +620,7 @@ const ProjectEntityUpdateHandler = {
         )
         if (existingFile) {
           const doc = new Doc({ name: docName })
+          const filePath = `${folderPath.fileSystem}/${existingFile.name}`
           DocstoreManager.updateDoc(
             projectId.toString(),
             doc._id.toString(),
@@ -789,7 +643,7 @@ const ProjectEntityUpdateHandler = {
                     {
                       project_id: projectId,
                       doc_id: doc._id,
-                      path: path.fileSystem,
+                      path: filePath,
                       project_name: project.name,
                       rev: existingFile.rev + 1
                     },
@@ -797,7 +651,6 @@ const ProjectEntityUpdateHandler = {
                       if (err) {
                         return callback(err)
                       }
-                      const docPath = path.fileSystem
                       const projectHistoryId =
                         project.overleaf &&
                         project.overleaf.history &&
@@ -805,14 +658,14 @@ const ProjectEntityUpdateHandler = {
                       const newDocs = [
                         {
                           doc,
-                          path: docPath,
+                          path: filePath,
                           docLines: docLines.join('\n')
                         }
                       ]
                       const oldFiles = [
                         {
                           file: existingFile,
-                          path: Path.join(path.fileSystem, existingFile.name)
+                          path: filePath
                         }
                       ]
                       DocumentUpdaterHandler.updateProjectStructure(
@@ -1341,13 +1194,18 @@ const ProjectEntityUpdateHandler = {
           project.overleaf &&
           project.overleaf.history &&
           project.overleaf.history.id
-        TpdsUpdateSender.moveEntity({
-          project_id: projectId,
-          project_name: project.name,
-          startPath,
-          endPath,
-          rev
-        })
+        // do not wait
+        TpdsUpdateSender.promises
+          .moveEntity({
+            project_id: projectId,
+            project_name: project.name,
+            startPath,
+            endPath,
+            rev
+          })
+          .catch(err => {
+            logger.error({ err }, 'error sending tpds update')
+          })
         DocumentUpdaterHandler.updateProjectStructure(
           projectId,
           projectHistoryId,
@@ -1390,13 +1248,18 @@ const ProjectEntityUpdateHandler = {
           project.overleaf &&
           project.overleaf.history &&
           project.overleaf.history.id
-        TpdsUpdateSender.moveEntity({
-          project_id: projectId,
-          project_name: project.name,
-          startPath,
-          endPath,
-          rev
-        })
+        // do not wait
+        TpdsUpdateSender.promises
+          .moveEntity({
+            project_id: projectId,
+            project_name: project.name,
+            startPath,
+            endPath,
+            rev
+          })
+          .catch(err => {
+            logger.error({ err }, 'error sending tpds update')
+          })
         DocumentUpdaterHandler.updateProjectStructure(
           projectId,
           projectHistoryId,
@@ -1796,7 +1659,6 @@ module.exports = ProjectEntityUpdateHandler
 module.exports.promises = promisifyAll(ProjectEntityUpdateHandler, {
   without: ['isPathValidForRootDoc'],
   multiResult: {
-    copyFileFromExistingProjectWithProject: ['fileRef', 'folderId'],
     _addDocAndSendToTpds: ['result', 'project'],
     addDoc: ['doc', 'folderId'],
     addDocWithRanges: ['doc', 'folderId'],

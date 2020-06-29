@@ -133,7 +133,10 @@ describe('ProjectEntityUpdateHandler', function() {
       addFile: sinon.stub().yields(),
       addDoc: sinon.stub(),
       deleteEntity: sinon.stub().yields(),
-      moveEntity: sinon.stub()
+      moveEntity: sinon.stub(),
+      promises: {
+        moveEntity: sinon.stub().resolves()
+      }
     }
     this.FileStoreHandler = {
       copyFile: sinon.stub(),
@@ -172,129 +175,6 @@ describe('ProjectEntityUpdateHandler', function() {
         '../Editor/EditorRealTimeController': this.EditorRealTimeController,
         '../../infrastructure/FileWriter': this.FileWriter
       }
-    })
-  })
-
-  describe('copyFileFromExistingProjectWithProject', function() {
-    beforeEach(function() {
-      this.oldProjectId = '123kljadas'
-      this.oldFileRef = { name: this.fileName, _id: 'oldFileRef' }
-      this.ProjectEntityMongoUpdateHandler._confirmFolder.returns(folderId)
-      this.ProjectEntityMongoUpdateHandler._putElement.yields(null, {
-        path: { fileSystem: this.fileSystemPath }
-      })
-      this.FileStoreHandler.copyFile.yields(null, this.fileUrl)
-      this.ProjectEntityUpdateHandler.copyFileFromExistingProjectWithProject(
-        this.project._id,
-        this.project,
-        folderId,
-        this.oldProjectId,
-        this.oldFileRef,
-        userId,
-        this.callback
-      )
-    })
-
-    it('should copy the file in FileStoreHandler', function() {
-      this.FileStoreHandler.copyFile
-        .calledWith(this.oldProjectId, this.oldFileRef._id, projectId, fileId)
-        .should.equal(true)
-    })
-
-    it('should put file into folder by calling put element', function() {
-      this.ProjectEntityMongoUpdateHandler._putElement
-        .calledWithMatch(
-          this.project,
-          folderId,
-          { _id: fileId, name: this.fileName },
-          'file'
-        )
-        .should.equal(true)
-    })
-
-    it('should return doc and parent folder', function() {
-      this.callback
-        .calledWithMatch(null, { _id: fileId, name: this.fileName }, folderId)
-        .should.equal(true)
-    })
-
-    it('should call third party data store if versioning is enabled', function() {
-      this.TpdsUpdateSender.addFile
-        .calledWith({
-          project_id: projectId,
-          file_id: fileId,
-          path: this.fileSystemPath,
-          rev: 0,
-          project_name: this.project.name
-        })
-        .should.equal(true)
-    })
-
-    it('should should send the change in project structure to the doc updater', function() {
-      const changesMatcher = sinon.match(changes => {
-        const { newFiles } = changes
-        if (newFiles.length !== 1) {
-          return false
-        }
-        const newFile = newFiles[0]
-        return (
-          newFile.file._id === fileId &&
-          newFile.path === this.fileSystemPath &&
-          newFile.url === this.fileUrl
-        )
-      })
-
-      this.DocumentUpdaterHandler.updateProjectStructure
-        .calledWithMatch(projectId, projectHistoryId, userId, changesMatcher)
-        .should.equal(true)
-    })
-  })
-
-  describe('copyFileFromExistingProjectWithProject, with linkedFileData and hash', function() {
-    beforeEach(function() {
-      this.oldProjectId = '123kljadas'
-      this.oldFileRef = {
-        _id: 'oldFileRef',
-        name: this.fileName,
-        linkedFileData: this.linkedFileData,
-        hash: '123456'
-      }
-      this.ProjectEntityMongoUpdateHandler._confirmFolder.returns(folderId)
-      this.ProjectEntityMongoUpdateHandler._putElement.yields(null, {
-        path: { fileSystem: this.fileSystemPath }
-      })
-      this.FileStoreHandler.copyFile.yields(null, this.fileUrl)
-      this.ProjectEntityUpdateHandler.copyFileFromExistingProjectWithProject(
-        this.project._id,
-        this.project,
-        folderId,
-        this.oldProjectId,
-        this.oldFileRef,
-        userId,
-        this.callback
-      )
-    })
-
-    it('should copy the file in FileStoreHandler', function() {
-      this.FileStoreHandler.copyFile
-        .calledWith(this.oldProjectId, this.oldFileRef._id, projectId, fileId)
-        .should.equal(true)
-    })
-
-    it('should put file into folder by calling put element, with the linkedFileData and hash', function() {
-      this.ProjectEntityMongoUpdateHandler._putElement
-        .calledWithMatch(
-          this.project,
-          folderId,
-          {
-            _id: fileId,
-            name: this.fileName,
-            linkedFileData: this.linkedFileData,
-            hash: '123456'
-          },
-          'file'
-        )
-        .should.equal(true)
     })
   })
 
@@ -1003,10 +883,17 @@ describe('ProjectEntityUpdateHandler', function() {
         this.folder = { _id: folderId, docs: [], fileRefs: [this.existingFile] }
         this.newDoc = { _id: docId }
         this.docLines = ['line one', 'line two']
-        this.path = 'path/to/file'
-        this.ProjectLocator.findElement.yields(null, this.folder, {
-          fileSystem: this.path
-        })
+        this.folderPath = '/path/to/folder'
+        this.filePath = '/path/to/folder/foo.tex'
+        this.ProjectLocator.findElement
+          .withArgs({
+            project_id: projectId,
+            element_id: this.folder._id,
+            type: 'folder'
+          })
+          .yields(null, this.folder, {
+            fileSystem: this.folderPath
+          })
         this.DocstoreManager.updateDoc.yields()
         this.ProjectEntityMongoUpdateHandler.replaceFileWithDoc.yields(
           null,
@@ -1047,7 +934,7 @@ describe('ProjectEntityUpdateHandler', function() {
         expect(this.TpdsUpdateSender.addDoc).to.have.been.calledWith({
           project_id: projectId,
           doc_id: this.newDoc._id,
-          path: this.path,
+          path: this.filePath,
           project_name: this.newProject.name,
           rev: this.existingFile.rev + 1
         })
@@ -1057,13 +944,13 @@ describe('ProjectEntityUpdateHandler', function() {
         const oldFiles = [
           {
             file: this.existingFile,
-            path: `${this.path}/foo.tex`
+            path: this.filePath
           }
         ]
         const newDocs = [
           {
             doc: sinon.match(this.newDoc),
-            path: this.path,
+            path: this.filePath,
             docLines: this.docLines.join('\n')
           }
         ]
@@ -1788,7 +1675,7 @@ describe('ProjectEntityUpdateHandler', function() {
     })
 
     it('notifies tpds', function() {
-      this.TpdsUpdateSender.moveEntity
+      this.TpdsUpdateSender.promises.moveEntity
         .calledWith({
           project_id: projectId,
           project_name: this.project_name,
@@ -1847,7 +1734,7 @@ describe('ProjectEntityUpdateHandler', function() {
       })
 
       it('notifies tpds', function() {
-        this.TpdsUpdateSender.moveEntity
+        this.TpdsUpdateSender.promises.moveEntity
           .calledWith({
             project_id: projectId,
             project_name: this.project_name,

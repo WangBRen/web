@@ -76,9 +76,6 @@
 				tooltip-append-to-body="true"
 				stop-propagation="click"
 			) i
-		if isShowingV1Projects
-			li(ng-class="{active: (filter == 'v1')}", ng-click="filterProjects('v1')")
-				a(href) #{translate("v1_projects")}
 		li.separator
 			h2 #{translate("tags_slash_folders")}
 		li.tag(ng-cloak)
@@ -102,14 +99,8 @@
 				)
 				span.name {{tag.name}} 
 					span.subdued  ({{countProjectsForTag(tag)}})
-					span.v1-badge(
-						ng-if="tag.isV1",
-						ng-cloak,
-						aria-label=translate("v1_badge")
-						tooltip-template="'v1TagTooltipTemplate'"
-						tooltip-append-to-body="true"
-					)
-			span.dropdown.tag-menu(dropdown)(ng-if="!tag.isV1")
+
+			span.dropdown.tag-menu(dropdown)
 				a.dropdown-toggle(
 					href="#",
 					data-toggle="dropdown",
@@ -167,11 +158,9 @@
 		//- 		a(href="/user/bonus" ng-click="share()") #{translate("sharing_sl")}.
 		.row-spaced(ng-if="hasProjects && userHasNoSubscription && !userOnPayingUniversity", ng-cloak).text-centered
 			hr
-			p.small In response to ongoing developments around the #COVID19 pandemic, we're providing free temporary upgrades to our Professional Accounts.
-				span &nbsp;&nbsp;
-					a(href="https://overleaf.com/blog/helping-you-collaborate-on-overleaf-during-the-coronavirus-pandemic") More info.
+			p.small To help you work from home throughout 2020 and beyond, we're providing specially discounted annual plans.
 			p
-				a(href="https://forms.gle/zWrVdF3GdoWovjd66").btn.btn-primary Request Upgrade
+				a(href="https://www.overleaf.com/events/wfh2020").btn.btn-primary Upgrade
 
 			
 script.

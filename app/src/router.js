@@ -79,10 +79,10 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
 
   webRouter.get('/restricted', AuthorizationMiddleware.restricted)
 
-  webRouter.get('/register', UserPagesController.registerPage)
-  AuthenticationController.addEndpointToLoginWhitelist('/register')
-  
-  webRouter.post('/register', UserController.register)
+  if (Features.hasFeature('registration')) {
+    webRouter.get('/register', UserPagesController.registerPage)
+    AuthenticationController.addEndpointToLoginWhitelist('/register')
+  }
   publicApiRouter.post('/register', UserController.register)
 
   EditorRouter.apply(webRouter, privateApiRouter)
@@ -802,11 +802,13 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
 
   webRouter.get(
     '/project/:project_id/messages',
+    AuthorizationMiddleware.blockRestrictedUserFromProject,
     AuthorizationMiddleware.ensureUserCanReadProject,
     ChatController.getMessages
   )
   webRouter.post(
     '/project/:project_id/messages',
+    AuthorizationMiddleware.blockRestrictedUserFromProject,
     AuthorizationMiddleware.ensureUserCanReadProject,
     RateLimiterMiddleware.rateLimit({
       endpointName: 'send-chat-message',
@@ -991,6 +993,11 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
 
   webRouter.get(
     '/status/compiler/:Project_id',
+    RateLimiterMiddleware.rateLimit({
+      endpointName: 'status-compiler',
+      maxRequests: 10,
+      timeInterval: 60
+    }),
     AuthorizationMiddleware.ensureUserCanReadProject,
     function(req, res) {
       const projectId = req.params.Project_id
@@ -1044,7 +1051,7 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
 
   privateApiRouter.get('/opps-small', function(req, res, next) {
     logger.err('test error occured')
-    res.send()
+    res.sendStatus(200)
   })
 
   webRouter.post('/error/client', function(req, res, next) {

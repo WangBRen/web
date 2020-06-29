@@ -15,8 +15,7 @@ const entryPoints = {
   ide: './frontend/js/ide.js',
   style: './frontend/stylesheets/style.less',
   'ieee-style': './frontend/stylesheets/ieee-style.less',
-  'light-style': './frontend/stylesheets/light-style.less',
-  'sl-style': './frontend/stylesheets/sl-style.less'
+  'light-style': './frontend/stylesheets/light-style.less'
 }
 
 // Attempt to load frontend entry-points from modules, if they exist
@@ -57,8 +56,12 @@ module.exports = {
       {
         // Pass application JS files through babel-loader, compiling to ES5
         test: /\.js$/,
-        // Only compile application files (dependencies are in ES5 already)
-        exclude: /node_modules/,
+        // Only compile application files (npm and vendored dependencies are in
+        // ES5 already)
+        exclude: [
+          /node_modules/,
+          path.resolve(__dirname, 'frontend/js/vendor')
+        ],
         use: [
           {
             loader: 'babel-loader',
@@ -104,9 +107,7 @@ module.exports = {
             options: {
               // Uniquely identifies the postcss plugin (required by webpack)
               ident: 'postcss',
-              plugins: [
-                require('autoprefixer')({ env: 'last 2 versions, ie >= 10' })
-              ]
+              plugins: [require('autoprefixer')]
             }
           },
           // Compiles the Less syntax to CSS
@@ -178,16 +179,6 @@ module.exports = {
           {
             loader: 'expose-loader',
             options: 'angular'
-          }
-        ]
-      },
-      {
-        // Expose lodash global variable
-        test: require.resolve('lodash'),
-        use: [
-          {
-            loader: 'expose-loader',
-            options: '_'
           }
         ]
       }

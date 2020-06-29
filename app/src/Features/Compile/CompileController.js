@@ -77,8 +77,10 @@ module.exports = CompileController = {
         validationProblems
       ) => {
         if (error) {
+          Metrics.inc('compile-error')
           return next(error)
         }
+        Metrics.inc('compile-status', 1, { status: status })
         res.json({
           status,
           outputFiles,
@@ -214,13 +216,13 @@ module.exports = CompileController = {
       return rateLimit(function(err, canContinue) {
         if (err != null) {
           logger.err({ err }, 'error checking rate limit for pdf download')
-          return res.send(500)
+          return res.sendStatus(500)
         } else if (!canContinue) {
           logger.log(
             { project_id, ip: req.ip },
             'rate limit hit downloading pdf'
           )
-          return res.send(500)
+          return res.sendStatus(500)
         } else {
           return CompileController._downloadAsUser(req, function(
             error,

@@ -1,4 +1,4 @@
-version: "2"
+version: "2.3"
 
 volumes:
   data:
@@ -6,7 +6,9 @@ volumes:
 services:
 
   test_unit:
-    image: node:10.19.0
+    build:
+      context: .
+      target: base
     volumes:
       - .:/app
     working_dir: /app
@@ -16,11 +18,12 @@ services:
     user: node
 
   test_acceptance:
-    image: node:10.19.0
+    image: node:10.21.0
     volumes:
       - .:/app
     working_dir: /app
     environment:
+      BCRYPT_ROUNDS: 1
       REDIS_HOST: redis
       MONGO_URL: "mongodb://mongo/sharelatex"
       SHARELATEX_ALLOW_PUBLIC_ACCESS: 'true'
@@ -29,6 +32,7 @@ services:
       ENABLED_LINKED_FILE_TYPES: 'url,project_file,project_output_file,mendeley,zotero'
       MOCHA_GREP: ${MOCHA_GREP}
       NODE_ENV: test
+      LOCK_MANAGER_MAX_LOCK_WAIT_TIME: 30000
       # SHARELATEX_ALLOW_ANONYMOUS_READ_AND_WRITE_SHARING: 'true'
       SHARELATEX_CONFIG:
     command: npm run test:acceptance:app
