@@ -33,7 +33,7 @@ define(['../base'], App =>
           // .post('/admin/register', {
           .post('/register', {
             email,
-            _csrf: window.csrfToken
+            // _csrf: window.csrfToken
           })
           .then(function(response) {
             const { data } = response

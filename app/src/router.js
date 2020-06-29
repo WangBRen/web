@@ -79,13 +79,10 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
 
   webRouter.get('/restricted', AuthorizationMiddleware.restricted)
 
-  if (Features.hasFeature('registration')) {
-    webRouter.get('/register', UserPagesController.registerPage)
-    AuthenticationController.addEndpointToLoginWhitelist('/register')
-  }
-
-  webRouter.post('/register', UserController.register)
+  webRouter.get('/register', UserPagesController.registerPage)
   AuthenticationController.addEndpointToLoginWhitelist('/register')
+  
+  webRouter.post('/register', UserController.register)
   publicApiRouter.post('/register', UserController.register)
 
   EditorRouter.apply(webRouter, privateApiRouter)
