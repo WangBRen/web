@@ -30,7 +30,8 @@ define(['../base'], App =>
       $scope.error = false
       return Array.from(emails).map(email =>
         queuedHttp
-          .post('/admin/register', {
+          // .post('/admin/register', {
+          .post('/register', {
             email,
             _csrf: window.csrfToken
           })
