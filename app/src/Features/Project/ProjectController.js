@@ -1,19 +1,17 @@
-/* eslint-disable
-   camelcase
-*/
-
+const _ = require('lodash')
 const Path = require('path')
+const OError = require('@overleaf/o-error')
 const fs = require('fs')
 const crypto = require('crypto')
 const async = require('async')
 const logger = require('logger-sharelatex')
-const { ObjectId } = require('../../infrastructure/mongojs')
+const { ObjectId } = require('mongodb')
 const ProjectDeleter = require('./ProjectDeleter')
 const ProjectDuplicator = require('./ProjectDuplicator')
 const ProjectCreationHandler = require('./ProjectCreationHandler')
 const EditorController = require('../Editor/EditorController')
 const ProjectHelper = require('./ProjectHelper')
-const metrics = require('metrics-sharelatex')
+const metrics = require('@overleaf/metrics')
 const { User } = require('../../models/User')
 const TagsHandler = require('../Tags/TagsHandler')
 const SubscriptionLocator = require('../Subscription/SubscriptionLocator')
@@ -26,7 +24,6 @@ const ProjectUpdateHandler = require('./ProjectUpdateHandler')
 const ProjectGetter = require('./ProjectGetter')
 const PrivilegeLevels = require('../Authorization/PrivilegeLevels')
 const AuthenticationController = require('../Authentication/AuthenticationController')
-const PackageVersions = require('../../infrastructure/PackageVersions')
 const Sources = require('../Authorization/Sources')
 const TokenAccessHandler = require('../TokenAccess/TokenAccessHandler')
 const CollaboratorsGetter = require('../Collaborators/CollaboratorsGetter')
@@ -37,8 +34,10 @@ const NotificationsBuilder = require('../Notifications/NotificationsBuilder')
 const { V1ConnectionError } = require('../Errors/Errors')
 const Features = require('../../infrastructure/Features')
 const BrandVariationsHandler = require('../BrandVariations/BrandVariationsHandler')
-const { getUserAffiliations } = require('../Institutions/InstitutionsAPI')
 const UserController = require('../User/UserController')
+const AnalyticsManager = require('../Analytics/AnalyticsManager')
+const Modules = require('../../infrastructure/Modules')
+const { shouldUserSeeNewLogsUI } = require('../Helpers/NewLogsUI')
 
 const _ssoAvailable = (affiliation, session, linkedInstitutionIds) => {
   if (!affiliation.institution) return false
@@ -253,31 +252,42 @@ const ProjectController = {
       return res.send({ redir: '/register' })
     }
     const currentUser = AuthenticationController.getSessionUser(req)
-    const { first_name, last_name, email } = currentUser
+    const { first_name: firstName, last_name: lastName, email } = currentUser
     ProjectDuplicator.duplicate(
       currentUser,
       projectId,
       projectName,
       (err, project) => {
         if (err != null) {
-          logger.warn(
-            { err, projectId, userId: currentUser._id },
-            'error cloning project'
-          )
+          OError.tag(err, 'error cloning project', {
+            projectId,
+            userId: currentUser._id
+          })
           return next(err)
         }
         res.send({
           name: project.name,
           project_id: project._id,
           owner_ref: project.owner_ref,
-          owner: { first_name, last_name, email, _id: currentUser._id }
+          owner: {
+            first_name: firstName,
+            last_name: lastName,
+            email,
+            _id: currentUser._id
+          }
         })
       }
     )
   },
 
   newProject(req, res, next) {
-    const userId = AuthenticationController.getLoggedInUserId(req)
+    const currentUser = AuthenticationController.getSessionUser(req)
+    const {
+      first_name: firstName,
+      last_name: lastName,
+      email,
+      _id: userId
+    } = currentUser
     const projectName =
       req.body.projectName != null ? req.body.projectName.trim() : undefined
     const { template } = req.body
@@ -296,7 +306,16 @@ const ProjectController = {
         if (err != null) {
           return next(err)
         }
-        res.send({ project_id: project._id })
+        res.send({
+          project_id: project._id,
+          owner_ref: project.owner_ref,
+          owner: {
+            first_name: firstName,
+            last_name: lastName,
+            email,
+            _id: userId
+          }
+        })
       }
     )
   },
@@ -346,7 +365,8 @@ const ProjectController = {
           }
           const entities = docs
             .concat(files)
-            .sort((a, b) => a.path > b.path) // Sort by path ascending
+            // Sort by path ascending
+            .sort((a, b) => (a.path > b.path ? 1 : a.path < b.path ? -1 : 0))
             .map(e => ({
               path: e.path,
               type: e.doc != null ? 'doc' : 'file'
@@ -361,8 +381,6 @@ const ProjectController = {
     const timer = new metrics.Timer('project-list')
     const userId = AuthenticationController.getLoggedInUserId(req)
     const currentUser = AuthenticationController.getSessionUser(req)
-    let noV1Connection = false
-    let institutionLinkingError
     async.parallel(
       {
         tags(cb) {
@@ -383,7 +401,6 @@ const ProjectController = {
             currentUser,
             (error, hasPaidSubscription) => {
               if (error != null && error instanceof V1ConnectionError) {
-                noV1Connection = true
                 return cb(null, true)
               }
               cb(error, hasPaidSubscription)
@@ -397,25 +414,54 @@ const ProjectController = {
             cb
           )
         },
-        userAffiliations(cb) {
-          if (!Features.hasFeature('affiliations')) {
-            return cb(null, [])
-          }
-          getUserAffiliations(userId, (error, affiliations) => {
+        userEmailsData(cb) {
+          const result = { list: [], allInReconfirmNotificationPeriods: [] }
+
+          UserGetter.getUserFullEmails(userId, (error, fullEmails) => {
             if (error && error instanceof V1ConnectionError) {
-              noV1Connection = true
-              return cb(null, [])
+              return cb(null, result)
             }
-            cb(error, affiliations)
+
+            if (!Features.hasFeature('affiliations')) {
+              result.list = fullEmails
+              return cb(null, result)
+            }
+            Modules.hooks.fire(
+              'allInReconfirmNotificationPeriodsForUser',
+              fullEmails,
+              (error, results) => {
+                // Module.hooks.fire accepts multiple methods
+                // and does async.series
+                const allInReconfirmNotificationPeriods =
+                  (results && results[0]) || []
+                return cb(null, {
+                  list: fullEmails,
+                  allInReconfirmNotificationPeriods
+                })
+              }
+            )
           })
         }
       },
       (err, results) => {
         if (err != null) {
-          logger.warn({ err }, 'error getting data for project list page')
+          OError.tag(err, 'error getting data for project list page')
           return next(err)
         }
-        const { notifications, user, userAffiliations } = results
+        const { notifications, user, userEmailsData } = results
+
+        const userEmails = userEmailsData.list || []
+
+        const userAffiliations = userEmails
+          .filter(emailData => !!emailData.affiliation)
+          .map(emailData => {
+            const result = emailData.affiliation
+            result.email = emailData.email
+            return result
+          })
+
+        const { allInReconfirmNotificationPeriods } = userEmailsData
+
         // Handle case of deleted user
         if (user == null) {
           UserController.logout(req, res, next)
@@ -431,7 +477,9 @@ const ProjectController = {
         }
 
         // Institution SSO Notifications
+        let reconfirmedViaSAML
         if (Features.hasFeature('saml')) {
+          reconfirmedViaSAML = _.get(req.session, ['saml', 'reconfirmed'])
           const samlSession = req.session.saml
           // Notification: SSO Available
           const linkedInstitutionIds = []
@@ -471,7 +519,7 @@ const ProjectController = {
             if (
               samlSession.requestedEmail &&
               samlSession.emailNonCanonical &&
-              !samlSession.linkedToAnother
+              !samlSession.error
             ) {
               notificationsInstitution.push({
                 institutionEmail: samlSession.emailNonCanonical,
@@ -487,7 +535,7 @@ const ProjectController = {
             if (
               samlSession.registerIntercept &&
               samlSession.institutionEmail &&
-              !samlSession.linkedToAnother
+              !samlSession.error
             ) {
               notificationsInstitution.push({
                 email: samlSession.institutionEmail,
@@ -495,20 +543,11 @@ const ProjectController = {
               })
             }
 
-            // Notification: Already linked to another account
-            if (samlSession.linkedToAnother) {
-              notificationsInstitution.push({
-                templateKey: 'notification_institution_sso_linked_by_another'
-              })
-            }
-
             // Notification: When there is a session error
             if (samlSession.error) {
-              institutionLinkingError = samlSession.error
               notificationsInstitution.push({
-                message: samlSession.error.message,
                 templateKey: 'notification_institution_sso_error',
-                tryAgain: samlSession.error.tryAgain
+                error: samlSession.error
               })
             }
           }
@@ -522,7 +561,6 @@ const ProjectController = {
           results.projects,
           userId
         )
-        const warnings = ProjectController._buildWarningsList(noV1Connection)
 
         // in v2 add notifications for matching university IPs
         if (Settings.overleaf != null && req.ip !== user.lastLoginIp) {
@@ -540,12 +578,13 @@ const ProjectController = {
             tags,
             notifications: notifications || [],
             notificationsInstitution,
+            allInReconfirmNotificationPeriods,
             portalTemplates,
             user,
             userAffiliations,
+            userEmails,
             hasSubscription: results.hasSubscription,
-            institutionLinkingError,
-            warnings,
+            reconfirmedViaSAML,
             zipFileSizeLimit: Settings.maxUploadSize
           }
 
@@ -585,16 +624,18 @@ const ProjectController = {
   },
 
   loadEditor(req, res, next) {
-    let anonymous, userId
     const timer = new metrics.Timer('load-editor')
     if (!Settings.editorIsOpen) {
       return res.render('general/closed', { title: 'updating_site' })
     }
 
+    let anonymous, userId, sessionUser
     if (AuthenticationController.isUserLoggedIn(req)) {
+      sessionUser = AuthenticationController.getSessionUser(req)
       userId = AuthenticationController.getLoggedInUserId(req)
       anonymous = false
     } else {
+      sessionUser = null
       anonymous = true
       userId = null
     }
@@ -627,16 +668,20 @@ const ProjectController = {
           if (userId == null) {
             cb(null, defaultSettingsForAnonymousUser(userId))
           } else {
-            User.findById(userId, (err, user) => {
-              // Handle case of deleted user
-              if (user == null) {
-                UserController.logout(req, res, next)
-                return
-              }
+            User.findById(
+              userId,
+              'email first_name last_name referal_id signUpDate featureSwitches features refProviders alphaProgram betaProgram isAdmin ace',
+              (err, user) => {
+                // Handle case of deleted user
+                if (user == null) {
+                  UserController.logout(req, res, next)
+                  return
+                }
 
-              logger.log({ projectId, userId }, 'got user')
-              cb(err, user)
-            })
+                logger.log({ projectId, userId }, 'got user')
+                cb(err, user)
+              }
+            )
           }
         },
         subscription(cb) {
@@ -681,7 +726,7 @@ const ProjectController = {
       },
       (err, results) => {
         if (err != null) {
-          logger.warn({ err }, 'error getting details for project page')
+          OError.tag(err, 'error getting details for project page')
           return next(err)
         }
         const { project } = results
@@ -694,12 +739,17 @@ const ProjectController = {
           projectId
         )
         const { isTokenMember } = results
+        const allowedImageNames = ProjectHelper.getAllowedImagesForUser(
+          sessionUser
+        )
+        const wantsOldFileTreeUI =
+          req.query && req.query.new_file_tree_ui === 'false'
         AuthorizationManager.getPrivilegeLevelForProject(
           userId,
           projectId,
           anonRequestToken,
           (error, privilegeLevel) => {
-            let allowedFreeTrial
+            let allowedFreeTrial = true
             if (error != null) {
               return next(error)
             }
@@ -710,12 +760,8 @@ const ProjectController = {
               return res.sendStatus(401)
             }
 
-            if (
-              subscription != null &&
-              subscription.freeTrial != null &&
-              subscription.freeTrial.expiresAt != null
-            ) {
-              allowedFreeTrial = !!subscription.freeTrial.allowed || true
+            if (subscription != null) {
+              allowedFreeTrial = false
             }
 
             let wsUrl = Settings.wsUrl
@@ -726,8 +772,7 @@ const ProjectController = {
             } else if (
               Settings.wsUrlV2 &&
               Settings.wsUrlV2Percentage > 0 &&
-              (ObjectId(projectId).getTimestamp() / 1000) %
-                100 <
+              (ObjectId(projectId).getTimestamp() / 1000) % 100 <
                 Settings.wsUrlV2Percentage
             ) {
               wsUrl = Settings.wsUrlV2
@@ -744,6 +789,16 @@ const ProjectController = {
             }
             metrics.inc(metricName)
 
+            if (userId) {
+              AnalyticsManager.recordEvent(userId, 'project-opened', {
+                projectId: project._id
+              })
+            }
+
+            const userShouldSeeNewLogsUI = shouldUserSeeNewLogsUI(user)
+            const wantsOldLogsUI =
+              req.query && req.query.new_logs_ui === 'false'
+
             res.render('project/editor', {
               title: project.name,
               priority_title: true,
@@ -756,12 +811,11 @@ const ProjectController = {
                 last_name: user.last_name,
                 referal_id: user.referal_id,
                 signUpDate: user.signUpDate,
-                subscription: {
-                  freeTrial: { allowed: allowedFreeTrial }
-                },
+                allowedFreeTrial: allowedFreeTrial,
                 featureSwitches: user.featureSwitches,
                 features: user.features,
                 refProviders: user.refProviders,
+                alphaProgram: user.alphaProgram,
                 betaProgram: user.betaProgram,
                 isAdmin: user.isAdmin
               },
@@ -796,10 +850,14 @@ const ProjectController = {
                 project.overleaf.history &&
                 Boolean(project.overleaf.history.display),
               brandVariation,
-              allowedImageNames: Settings.allowedImageNames || [],
+              allowedImageNames,
               gitBridgePublicBaseUrl: Settings.gitBridgePublicBaseUrl,
               wsUrl,
-              showSupport: Features.hasFeature('support')
+              showSupport: Features.hasFeature('support'),
+              showNewLogsUI: userShouldSeeNewLogsUI && !wantsOldLogsUI,
+              showNewNavigationUI:
+                req.query && req.query.new_navigation_ui === 'true',
+              showReactFileTree: !wantsOldFileTreeUI
             })
             timer.done()
           }
@@ -957,14 +1015,6 @@ const ProjectController = {
     )
   },
 
-  _buildWarningsList(noConnection) {
-    return noConnection
-      ? [
-          'Error accessing Overleaf V1. Some of your projects or features may be missing.'
-        ]
-      : []
-  },
-
   _buildPortalTemplatesList(affiliations) {
     if (affiliations == null) {
       affiliations = []
@@ -1006,17 +1056,15 @@ var defaultSettingsForAnonymousUser = userId => ({
   },
   featureSwitches: {
     github: false
-  }
+  },
+  alphaProgram: false,
+  betaProgram: false
 })
 
 var THEME_LIST = []
 function generateThemeList() {
   const files = fs.readdirSync(
-    Path.join(
-      __dirname,
-      '/../../../../frontend/js/vendor/',
-      PackageVersions.lib('ace')
-    )
+    Path.join(__dirname, '/../../../../node_modules/ace-builds/src-noconflict')
   )
   const result = []
   for (let file of files) {

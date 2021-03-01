@@ -1,6 +1,6 @@
 /* eslint-disable
     camelcase,
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
     no-path-concat,
 */
@@ -13,10 +13,11 @@
  * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
  */
 const logger = require('logger-sharelatex')
+const OError = require('@overleaf/o-error')
 const async = require('async')
-const metrics = require('metrics-sharelatex')
+const metrics = require('@overleaf/metrics')
 const Settings = require('settings-sharelatex')
-const { ObjectId } = require('mongoose').Types
+const { ObjectId } = require('mongodb')
 const { Project } = require('../../models/Project')
 const { Folder } = require('../../models/Folder')
 const ProjectEntityUpdateHandler = require('./ProjectEntityUpdateHandler')
@@ -27,7 +28,7 @@ const fs = require('fs')
 const Path = require('path')
 const { promisify } = require('util')
 const _ = require('underscore')
-const AnalyticsManger = require('../Analytics/AnalyticsManager')
+const AnalyticsManager = require('../Analytics/AnalyticsManager')
 
 const ProjectCreationHandler = {
   createBlankProject(owner_id, projectName, attributes, callback) {
@@ -55,7 +56,7 @@ const ProjectCreationHandler = {
             if (error != null) {
               return callback(error)
             }
-            AnalyticsManger.recordEvent(owner_id, 'project-imported', {
+            AnalyticsManager.recordEvent(owner_id, 'project-imported', {
               projectId: project._id,
               attributes
             })
@@ -78,7 +79,7 @@ const ProjectCreationHandler = {
               if (error != null) {
                 return callback(error)
               }
-              AnalyticsManger.recordEvent(owner_id, 'project-created', {
+              AnalyticsManager.recordEvent(owner_id, 'project-created', {
                 projectId: project._id,
                 attributes
               })
@@ -260,10 +261,7 @@ const ProjectCreationHandler = {
       owner_id,
       function(error, doc) {
         if (error != null) {
-          logger.warn(
-            { err: error },
-            'error adding root doc when creating project'
-          )
+          OError.tag(error, 'error adding root doc when creating project')
           return callback(error)
         }
         return ProjectEntityUpdateHandler.setRootDoc(

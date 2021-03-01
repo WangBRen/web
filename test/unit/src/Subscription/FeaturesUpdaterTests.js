@@ -16,7 +16,7 @@ const { expect } = require('chai')
 const sinon = require('sinon')
 const modulePath = '../../../../app/src/Features/Subscription/FeaturesUpdater'
 const { assert } = require('chai')
-const { ObjectId } = require('mongoose').Types
+const { ObjectId } = require('mongodb')
 
 describe('FeaturesUpdater', function() {
   beforeEach(function() {
@@ -32,21 +32,26 @@ describe('FeaturesUpdater', function() {
         './PlansLocator': (this.PlansLocator = {}),
         'logger-sharelatex': {
           log() {},
-          warn(obj, text) {
-            console.log(text)
-          }
+          warn() {}
         },
         'settings-sharelatex': (this.Settings = {}),
         '../Referal/ReferalFeatures': (this.ReferalFeatures = {}),
         './V1SubscriptionManager': (this.V1SubscriptionManager = {}),
         '../Institutions/InstitutionsFeatures': (this.InstitutionsFeatures = {}),
-        '../User/UserGetter': (this.UserGetter = {})
+        '../User/UserGetter': (this.UserGetter = {}),
+        '../../infrastructure/Modules': (this.Modules = {
+          hooks: { fire: sinon.stub() }
+        })
       }
     }))
   })
 
   describe('refreshFeatures', function() {
     beforeEach(function() {
+      this.user = {
+        _id: this.user_id,
+        features: {}
+      }
       this.UserFeaturesUpdater.updateFeatures = sinon.stub().yields()
       this.FeaturesUpdater._getIndividualFeatures = sinon
         .stub()
@@ -66,10 +71,9 @@ describe('FeaturesUpdater', function() {
       this.FeaturesUpdater._mergeFeatures = sinon
         .stub()
         .returns({ merged: 'features' })
-      this.UserGetter.getUser = sinon.stub().yields(null, {})
+      this.UserGetter.getUser = sinon.stub().yields(null, this.user)
       return (this.callback = sinon.stub())
     })
-
     describe('normally', function() {
       beforeEach(function() {
         return this.FeaturesUpdater.refreshFeatures(this.user_id, this.callback)
@@ -147,6 +151,24 @@ describe('FeaturesUpdater', function() {
       it('should update the user with the merged features', function() {
         return this.UserFeaturesUpdater.updateFeatures
           .calledWith(this.user_id, { merged: 'features' })
+          .should.equal(true)
+      })
+    })
+    describe('when losing dropbox feature', function() {
+      beforeEach(function() {
+        this.user = {
+          _id: this.user_id,
+          features: { dropbox: true }
+        }
+        this.UserGetter.getUser = sinon.stub().yields(null, this.user)
+        this.FeaturesUpdater._mergeFeatures = sinon
+          .stub()
+          .returns({ dropbox: false })
+        return this.FeaturesUpdater.refreshFeatures(this.user_id, this.callback)
+      })
+      it('should fire module hook to unlink dropbox', function() {
+        this.Modules.hooks.fire
+          .calledWith('removeDropbox', this.user._id)
           .should.equal(true)
       })
     })

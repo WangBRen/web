@@ -4,7 +4,7 @@ const { expect } = require('chai')
 const modulePath =
   '../../../../app/src/Features/Subscription/TeamInvitesHandler'
 
-const { ObjectId } = require('mongojs')
+const { ObjectId } = require('mongodb')
 const Errors = require('../../../../app/src/Features/Errors/Errors')
 
 describe('TeamInvitesHandler', function() {
@@ -54,7 +54,7 @@ describe('TeamInvitesHandler', function() {
 
     this.Subscription = {
       findOne: sinon.stub().yields(),
-      update: sinon.stub().yields()
+      updateOne: sinon.stub().yields()
     }
 
     this.EmailHandler = {
@@ -87,6 +87,7 @@ describe('TeamInvitesHandler', function() {
         console: console
       },
       requires: {
+        mongodb: { ObjectId },
         'logger-sharelatex': { log() {} },
         crypto: this.crypto,
         'settings-sharelatex': { siteUrl: 'http://example.com' },
@@ -96,8 +97,7 @@ describe('TeamInvitesHandler', function() {
         './SubscriptionLocator': this.SubscriptionLocator,
         './SubscriptionUpdater': this.SubscriptionUpdater,
         './LimitationsManager': this.LimitationsManager,
-        '../Email/EmailHandler': this.EmailHandler,
-        '../Errors/Errors': Errors
+        '../Email/EmailHandler': this.EmailHandler
       }
     })
   })
@@ -160,9 +160,7 @@ describe('TeamInvitesHandler', function() {
               sinon.match({
                 to: 'john.snow@example.com',
                 inviter: this.manager,
-                acceptInviteUrl: `http://example.com/subscription/invites/${
-                  this.newToken
-                }/`
+                acceptInviteUrl: `http://example.com/subscription/invites/${this.newToken}/`
               })
             )
             .should.equal(true)
@@ -200,7 +198,7 @@ describe('TeamInvitesHandler', function() {
         this.subscription,
         'John.Snow@example.com',
         (err, invite) => {
-          this.Subscription.update
+          this.Subscription.updateOne
             .calledWith(
               { _id: new ObjectId('55153a8014829a865bbf700d') },
               { $pull: { invited_emails: 'john.snow@example.com' } }
@@ -292,7 +290,7 @@ describe('TeamInvitesHandler', function() {
 
     it('removes the invite from the subscription', function(done) {
       this.TeamInvitesHandler.acceptInvite('dddddddd', this.user.id, () => {
-        this.Subscription.update
+        this.Subscription.updateOne
           .calledWith(
             { _id: new ObjectId('55153a8014829a865bbf700d') },
             { $pull: { teamInvites: { email: 'john.snow@example.com' } } }
@@ -310,14 +308,14 @@ describe('TeamInvitesHandler', function() {
         this.subscription,
         'jorah@example.com',
         () => {
-          this.Subscription.update
+          this.Subscription.updateOne
             .calledWith(
               { _id: new ObjectId('55153a8014829a865bbf700d') },
               { $pull: { teamInvites: { email: 'jorah@example.com' } } }
             )
             .should.eq(true)
 
-          this.Subscription.update
+          this.Subscription.updateOne
             .calledWith(
               { _id: new ObjectId('55153a8014829a865bbf700d') },
               { $pull: { invited_emails: 'jorah@example.com' } }

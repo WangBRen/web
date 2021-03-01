@@ -3,9 +3,9 @@ const Settings = require('settings-sharelatex')
 const querystring = require('querystring')
 const _ = require('lodash')
 const Url = require('url')
-const NodeHtmlEncoder = require('node-html-encoder').Encoder
 const Path = require('path')
 const moment = require('moment')
+const pug = require('pug-runtime')
 
 const IS_DEV_ENV = ['development', 'test'].includes(process.env.NODE_ENV)
 
@@ -13,8 +13,7 @@ const Features = require('./Features')
 const AuthenticationController = require('../Features/Authentication/AuthenticationController')
 const PackageVersions = require('./PackageVersions')
 const Modules = require('./Modules')
-
-const htmlEncoder = new NodeHtmlEncoder('numerical')
+const SafeHTMLSubstitute = require('../Features/Helpers/SafeHTMLSubstitution')
 
 let webpackManifest
 if (!IS_DEV_ENV) {
@@ -25,9 +24,16 @@ if (!IS_DEV_ENV) {
   webpackManifest = require(`../../../public/manifest.json`)
 }
 
+const I18N_HTML_INJECTIONS = new Set()
+
 module.exports = function(webRouter, privateApiRouter, publicApiRouter) {
   webRouter.use(function(req, res, next) {
     res.locals.session = req.session
+    next()
+  })
+
+  webRouter.use(function(req, res, next) {
+    res.locals.isIE = /\b(msie|trident)\b/i.test(req.headers['user-agent'])
     next()
   })
 
@@ -147,12 +153,8 @@ module.exports = function(webRouter, privateApiRouter, publicApiRouter) {
       }
     }
 
-    function _buildCssFileName(themeModifier) {
-      return `${Settings.brandPrefix}${themeModifier || ''}style.css`
-    }
-
-    res.locals.buildCssPath = function(themeModifier) {
-      const cssFileName = _buildCssFileName(themeModifier)
+    res.locals.buildCssPath = function(themeModifier = '') {
+      const cssFileName = `${themeModifier}style.css`
 
       let path
       if (IS_DEV_ENV) {
@@ -179,19 +181,31 @@ module.exports = function(webRouter, privateApiRouter, publicApiRouter) {
   })
 
   webRouter.use(function(req, res, next) {
-    res.locals.translate = function(key, vars, htmlEncode) {
-      if (vars == null) {
-        vars = {}
+    res.locals.translate = function(key, vars, components) {
+      vars = vars || {}
+
+      if (Settings.i18n.checkForHTMLInVars) {
+        Object.entries(vars).forEach(([field, value]) => {
+          if (pug.escape(value) !== value) {
+            const violationsKey = key + field
+            // do not flood the logs, log one sample per pod + key + field
+            if (!I18N_HTML_INJECTIONS.has(violationsKey)) {
+              logger.warn(
+                { key, field, value },
+                'html content in translations context vars'
+              )
+              I18N_HTML_INJECTIONS.add(violationsKey)
+            }
+          }
+        })
       }
-      if (htmlEncode == null) {
-        htmlEncode = false
-      }
+
       vars.appName = Settings.appName
-      const str = req.i18n.translate(key, vars)
-      if (htmlEncode) {
-        return htmlEncoder.htmlEncode(str)
+      const locale = req.i18n.translate(key, vars)
+      if (components) {
+        return SafeHTMLSubstitute.render(locale, components)
       } else {
-        return str
+        return locale
       }
     }
     // Don't include the query string parameters, otherwise Google
@@ -205,16 +219,6 @@ module.exports = function(webRouter, privateApiRouter, publicApiRouter) {
       }
       return string.charAt(0).toUpperCase() + string.slice(1)
     }
-    next()
-  })
-
-  webRouter.use(function(req, res, next) {
-    const subdomain = _.find(
-      Settings.i18n.subdomainLang,
-      subdomain => subdomain.lngCode === req.showUserOtherLng && !subdomain.hide
-    )
-    res.locals.recomendSubdomain = subdomain
-    res.locals.currentLngCode = req.lng
     next()
   })
 
@@ -262,7 +266,8 @@ module.exports = function(webRouter, privateApiRouter, publicApiRouter) {
   })
 
   webRouter.use(function(req, res, next) {
-    res.locals.gaToken = Settings.analytics && Settings.analytics.ga.token
+    res.locals.gaToken =
+      Settings.analytics && Settings.analytics.ga && Settings.analytics.ga.token
     res.locals.gaOptimizeId = _.get(Settings, ['analytics', 'gaOptimize', 'id'])
     next()
   })
@@ -313,34 +318,18 @@ module.exports = function(webRouter, privateApiRouter, publicApiRouter) {
   })
 
   webRouter.use(function(req, res, next) {
-    res.locals.uiConfig = {
-      defaultResizerSizeOpen: 7,
-      defaultResizerSizeClosed: 7,
-      eastResizerCursor: 'ew-resize',
-      westResizerCursor: 'ew-resize',
-      chatResizerSizeOpen: 7,
-      chatResizerSizeClosed: 0,
-      chatMessageBorderSaturation: '85%',
-      chatMessageBorderLightness: '40%',
-      chatMessageBgSaturation: '85%',
-      chatMessageBgLightness: '40%'
-    }
-    next()
-  })
-
-  webRouter.use(function(req, res, next) {
     // TODO
     if (Settings.overleaf != null) {
       res.locals.overallThemes = [
         {
           name: 'Default',
           val: '',
-          path: res.locals.buildCssPath(null, { hashedPath: true })
+          path: res.locals.buildCssPath()
         },
         {
           name: 'Light',
           val: 'light-',
-          path: res.locals.buildCssPath('light-', { hashedPath: true })
+          path: res.locals.buildCssPath('light-')
         }
       ]
     }
@@ -369,7 +358,8 @@ module.exports = function(webRouter, privateApiRouter, publicApiRouter) {
       sentryAllowedOriginRegex: Settings.sentry.allowedOriginRegex,
       sentryDsn: Settings.sentry.publicDSN,
       sentryEnvironment: Settings.sentry.environment,
-      sentryRelease: Settings.sentry.release
+      sentryRelease: Settings.sentry.release,
+      enableSubscriptions: Settings.enableSubscriptions
     }
     next()
   })

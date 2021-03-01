@@ -1,10 +1,9 @@
 /* eslint-disable
     camelcase,
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
     no-unused-vars,
     node/no-deprecated-api,
-    standard/no-callback-literal,
 */
 // TODO: This file was created by bulk-decaffeinate.
 // Fix any style issues and re-enable lint.
@@ -16,7 +15,7 @@
  * DS207: Consider shorter variations of null checks
  * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
  */
-let RecurlyWrapper
+const OError = require('@overleaf/o-error')
 const querystring = require('querystring')
 const crypto = require('crypto')
 const request = require('request')
@@ -26,8 +25,30 @@ const logger = require('logger-sharelatex')
 const Async = require('async')
 const Errors = require('../Errors/Errors')
 const SubscriptionErrors = require('./Errors')
+const { promisify } = require('util')
 
-module.exports = RecurlyWrapper = {
+function updateAccountEmailAddress(accountId, newEmail, callback) {
+  const data = {
+    email: newEmail
+  }
+  const requestBody = RecurlyWrapper._buildXml('account', data)
+
+  RecurlyWrapper.apiRequest(
+    {
+      url: `accounts/${accountId}`,
+      method: 'PUT',
+      body: requestBody
+    },
+    (error, response, body) => {
+      if (error != null) {
+        return callback(error)
+      }
+      RecurlyWrapper._parseAccountXml(body, callback)
+    }
+  )
+}
+
+const RecurlyWrapper = {
   apiUrl: Settings.apis.recurly.url || 'https://api.recurly.com/v2',
 
   _paypal: {
@@ -46,9 +67,12 @@ module.exports = RecurlyWrapper = {
         },
         function(error, response, responseBody) {
           if (error) {
-            logger.warn(
-              { error, user_id: user._id },
-              'error response from recurly while checking account'
+            OError.tag(
+              error,
+              'error response from recurly while checking account',
+              {
+                user_id: user._id
+              }
             )
             return next(error)
           }
@@ -67,7 +91,9 @@ module.exports = RecurlyWrapper = {
             account
           ) {
             if (err) {
-              logger.warn({ err, user_id: user._id }, 'error parsing account')
+              OError.tag(err, 'error parsing account', {
+                user_id: user._id
+              })
               return next(err)
             }
             cache.userExists = true
@@ -107,9 +133,12 @@ module.exports = RecurlyWrapper = {
         },
         (error, response, responseBody) => {
           if (error) {
-            logger.warn(
-              { error, user_id: user._id },
-              'error response from recurly while creating account'
+            OError.tag(
+              error,
+              'error response from recurly while creating account',
+              {
+                user_id: user._id
+              }
             )
             return next(error)
           }
@@ -118,7 +147,9 @@ module.exports = RecurlyWrapper = {
             account
           ) {
             if (err) {
-              logger.warn({ err, user_id: user._id }, 'error creating account')
+              OError.tag(err, 'error creating account', {
+                user_id: user._id
+              })
               return next(err)
             }
             cache.account = account
@@ -149,9 +180,12 @@ module.exports = RecurlyWrapper = {
         },
         (error, response, responseBody) => {
           if (error) {
-            logger.warn(
-              { error, user_id: user._id },
-              'error response from recurly while creating billing info'
+            OError.tag(
+              error,
+              'error response from recurly while creating billing info',
+              {
+                user_id: user._id
+              }
             )
             return next(error)
           }
@@ -160,10 +194,10 @@ module.exports = RecurlyWrapper = {
             billingInfo
           ) {
             if (err) {
-              logger.warn(
-                { err, user_id: user._id, accountCode },
-                'error creating billing info'
-              )
+              OError.tag(err, 'error creating billing info', {
+                user_id: user._id,
+                accountCode
+              })
               return next(err)
             }
             cache.billingInfo = billingInfo
@@ -212,9 +246,12 @@ module.exports = RecurlyWrapper = {
         },
         (error, response, responseBody) => {
           if (error) {
-            logger.warn(
-              { error, user_id: user._id },
-              'error response from recurly while setting address'
+            OError.tag(
+              error,
+              'error response from recurly while setting address',
+              {
+                user_id: user._id
+              }
             )
             return next(error)
           }
@@ -223,10 +260,9 @@ module.exports = RecurlyWrapper = {
             billingInfo
           ) {
             if (err) {
-              logger.warn(
-                { err, user_id: user._id },
-                'error updating billing info'
-              )
+              OError.tag(err, 'error updating billing info', {
+                user_id: user._id
+              })
               return next(err)
             }
             cache.billingInfo = billingInfo
@@ -263,9 +299,12 @@ module.exports = RecurlyWrapper = {
         },
         (error, response, responseBody) => {
           if (error) {
-            logger.warn(
-              { error, user_id: user._id },
-              'error response from recurly while creating subscription'
+            OError.tag(
+              error,
+              'error response from recurly while creating subscription',
+              {
+                user_id: user._id
+              }
             )
             return next(error)
           }
@@ -274,10 +313,9 @@ module.exports = RecurlyWrapper = {
             subscription
           ) {
             if (err) {
-              logger.warn(
-                { err, user_id: user._id },
-                'error creating subscription'
-              )
+              OError.tag(err, 'error creating subscription', {
+                user_id: user._id
+              })
               return next(err)
             }
             cache.subscription = subscription
@@ -312,18 +350,16 @@ module.exports = RecurlyWrapper = {
       ],
       function(err, result) {
         if (err) {
-          logger.warn(
-            { err, user_id: user._id },
-            'error in paypal subscription creation process'
-          )
+          OError.tag(err, 'error in paypal subscription creation process', {
+            user_id: user._id
+          })
           return callback(err)
         }
         if (!result.subscription) {
           err = new Error('no subscription object in result')
-          logger.warn(
-            { err, user_id: user._id },
-            'error in paypal subscription creation process'
-          )
+          OError.tag(err, 'error in paypal subscription creation process', {
+            user_id: user._id
+          })
           return callback(err)
         }
         logger.log(
@@ -573,26 +609,7 @@ module.exports = RecurlyWrapper = {
     )
   },
 
-  updateAccountEmailAddress(accountId, newEmail, callback) {
-    const data = {
-      email: newEmail
-    }
-    const requestBody = RecurlyWrapper._buildXml('account', data)
-
-    RecurlyWrapper.apiRequest(
-      {
-        url: `accounts/${accountId}`,
-        method: 'PUT',
-        body: requestBody
-      },
-      (error, response, body) => {
-        if (error != null) {
-          return callback(error)
-        }
-        RecurlyWrapper._parseAccountXml(body, callback)
-      }
-    )
-  },
+  updateAccountEmailAddress,
 
   getAccountActiveCoupons(accountId, callback) {
     return RecurlyWrapper.apiRequest(
@@ -975,18 +992,18 @@ module.exports = RecurlyWrapper = {
   _parseXml(xml, callback) {
     var convertDataTypes = function(data) {
       let key, value
-      if (data != null && data['$'] != null) {
-        if (data['$']['nil'] === 'nil') {
+      if (data != null && data.$ != null) {
+        if (data.$.nil === 'nil') {
           data = null
-        } else if (data['$'].href != null) {
-          data.url = data['$'].href
-          delete data['$']
-        } else if (data['$']['type'] === 'integer') {
-          data = parseInt(data['_'], 10)
-        } else if (data['$']['type'] === 'datetime') {
-          data = new Date(data['_'])
-        } else if (data['$']['type'] === 'array') {
-          delete data['$']
+        } else if (data.$.href != null) {
+          data.url = data.$.href
+          delete data.$
+        } else if (data.$.type === 'integer') {
+          data = parseInt(data._, 10)
+        } else if (data.$.type === 'datetime') {
+          data = new Date(data._)
+        } else if (data.$.type === 'array') {
+          delete data.$
           let array = []
           for (key in data) {
             value = data[key]
@@ -1038,6 +1055,12 @@ module.exports = RecurlyWrapper = {
     return builder.buildObject(data)
   }
 }
+
+RecurlyWrapper.promises = {
+  updateAccountEmailAddress: promisify(updateAccountEmailAddress)
+}
+
+module.exports = RecurlyWrapper
 
 function getCustomFieldsFromSubscriptionDetails(subscriptionDetails) {
   if (!subscriptionDetails.ITMCampaign) {

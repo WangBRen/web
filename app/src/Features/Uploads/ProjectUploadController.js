@@ -13,7 +13,7 @@
  */
 let ProjectUploadController
 const logger = require('logger-sharelatex')
-const metrics = require('metrics-sharelatex')
+const metrics = require('@overleaf/metrics')
 const fs = require('fs')
 const Path = require('path')
 const FileSystemImportManager = require('./FileSystemImportManager')
@@ -102,7 +102,12 @@ module.exports = ProjectUploadController = {
             },
             'error uploading file'
           )
-          if (error.message === 'project_has_too_many_files') {
+          if (error.name === 'InvalidNameError') {
+            return res.send({
+              success: false,
+              error: req.i18n.translate('invalid_filename')
+            })
+          } else if (error.message === 'project_has_too_many_files') {
             return res.send({
               success: false,
               error: req.i18n.translate('project_has_too_many_files')

@@ -14,17 +14,19 @@ services:
     working_dir: /app
     environment:
       MOCHA_GREP: ${MOCHA_GREP}
-    command: npm run test:unit:app
+      NODE_OPTIONS: "--unhandled-rejections=strict"
+    command: npm run --silent test:unit:app
     user: node
 
   test_acceptance:
-    image: node:10.21.0
+    image: node:10.23.1
     volumes:
       - .:/app
     working_dir: /app
     environment:
       BCRYPT_ROUNDS: 1
       REDIS_HOST: redis
+      QUEUES_REDIS_HOST: redis
       MONGO_URL: "mongodb://mongo/sharelatex"
       SHARELATEX_ALLOW_PUBLIC_ACCESS: 'true'
       PROJECT_HISTORY_ENABLED: 'true'
@@ -32,26 +34,49 @@ services:
       ENABLED_LINKED_FILE_TYPES: 'url,project_file,project_output_file,mendeley,zotero'
       MOCHA_GREP: ${MOCHA_GREP}
       NODE_ENV: test
+      NODE_OPTIONS: "--unhandled-rejections=strict"
       LOCK_MANAGER_MAX_LOCK_WAIT_TIME: 30000
+      MONGO_SERVER_SELECTION_TIMEOUT: 600000
+      MONGO_SOCKET_TIMEOUT: 300000
       # SHARELATEX_ALLOW_ANONYMOUS_READ_AND_WRITE_SHARING: 'true'
       SHARELATEX_CONFIG:
-    command: npm run test:acceptance:app
+      COOKIE_DOMAIN: .overleaf.test
+      PUBLIC_URL: 'http://www.overleaf.test:3000'
+      HTTP_TEST_HOST: www.overleaf.test
+      OT_JWT_AUTH_KEY: "very secret key"
+    extra_hosts:
+      - 'www.overleaf.test:127.0.0.1'
     depends_on:
       - redis
       - mongo
-    command: npm run test:acceptance:app
+    command: npm run --silent test:acceptance:app
 
-  test_frontend:
+  test_karma:
     build:
       context: .
       dockerfile: Dockerfile.frontend
     volumes:
       - .:/app
+    environment:
+      NODE_OPTIONS: "--unhandled-rejections=strict"
     working_dir: /app
-    command: npm run test:frontend:single
+    command: npm run --silent test:karma:single
+
+  test_frontend:
+    build:
+      context: .
+      target: base
+    volumes:
+      - .:/app
+    working_dir: /app
+    environment:
+      MOCHA_GREP: ${MOCHA_GREP}
+      NODE_OPTIONS: "--unhandled-rejections=strict"
+    command: npm run --silent test:frontend
+    user: node
 
   redis:
     image: redis
 
   mongo:
-    image: mongo:3.6.16
+    image: mongo:4.0.19

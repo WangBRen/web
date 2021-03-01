@@ -1,10 +1,9 @@
-const HttpErrors = require('@overleaf/o-error/http')
 const ProjectDeleter = require('../Project/ProjectDeleter')
 const EditorController = require('./EditorController')
 const ProjectGetter = require('../Project/ProjectGetter')
 const AuthorizationManager = require('../Authorization/AuthorizationManager')
 const ProjectEditorHandler = require('../Project/ProjectEditorHandler')
-const Metrics = require('metrics-sharelatex')
+const Metrics = require('@overleaf/metrics')
 const CollaboratorsGetter = require('../Collaborators/CollaboratorsGetter')
 const CollaboratorsInviteHandler = require('../Collaborators/CollaboratorsInviteHandler')
 const CollaboratorsHandler = require('../Collaborators/CollaboratorsHandler')
@@ -12,6 +11,7 @@ const PrivilegeLevels = require('../Authorization/PrivilegeLevels')
 const TokenAccessHandler = require('../TokenAccess/TokenAccessHandler')
 const AuthenticationController = require('../Authentication/AuthenticationController')
 const Errors = require('../Errors/Errors')
+const HttpErrorHandler = require('../Errors/HttpErrorHandler')
 const ProjectEntityUpdateHandler = require('../Project/ProjectEntityUpdateHandler')
 const { expressify } = require('../../util/promises')
 
@@ -68,8 +68,10 @@ async function joinProject(req, res, next) {
   }
   // Hide access tokens if this is not the project owner
   TokenAccessHandler.protectTokens(project, privilegeLevel)
+  // Hide sensitive data if the user is restricted
   if (isRestrictedUser) {
     project.owner = { _id: project.owner._id }
+    project.members = []
   }
   // Only show the 'renamed or deleted' message once
   if (project.deletedByExternalDataSource) {
@@ -168,6 +170,7 @@ async function addFolder(req, res, next) {
   const projectId = req.params.Project_id
   const { name } = req.body
   const parentFolderId = req.body.parent_folder_id
+  const userId = AuthenticationController.getLoggedInUserId(req)
   if (!_nameIsAcceptableLength(name)) {
     return res.sendStatus(400)
   }
@@ -176,7 +179,8 @@ async function addFolder(req, res, next) {
       projectId,
       parentFolderId,
       name,
-      'editor'
+      'editor',
+      userId
     )
     res.json(doc)
   } catch (err) {
@@ -268,15 +272,13 @@ async function convertDocToFile(req, res, next) {
     res.json({ fileId: fileRef._id.toString() })
   } catch (err) {
     if (err instanceof Errors.NotFoundError) {
-      throw new HttpErrors.NotFoundError({
-        info: { public: { message: 'Document not found' } }
-      })
+      return HttpErrorHandler.notFound(req, res, 'Document not found')
     } else if (err instanceof Errors.DocHasRangesError) {
-      throw new HttpErrors.UnprocessableEntityError({
-        info: {
-          public: { message: 'Document has comments or tracked changes' }
-        }
-      })
+      return HttpErrorHandler.unprocessableEntity(
+        req,
+        res,
+        'Document has comments or tracked changes'
+      )
     } else {
       throw err
     }

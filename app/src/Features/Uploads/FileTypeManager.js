@@ -14,6 +14,7 @@ const FileTypeManager = {
     '.bibtex',
     '.txt',
     '.tikz',
+    '.mtx',
     '.rtex',
     '.md',
     '.asy',
@@ -30,7 +31,8 @@ const FileTypeManager = {
     '.clo',
     '.ldf',
     '.rmd',
-    '.lua'
+    '.lua',
+    '.gv'
   ],
 
   IGNORE_EXTENSIONS: [

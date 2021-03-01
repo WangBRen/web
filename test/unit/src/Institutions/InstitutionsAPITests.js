@@ -37,7 +37,7 @@ describe('InstitutionsAPI', function() {
       },
       requires: {
         'logger-sharelatex': this.logger,
-        'metrics-sharelatex': {
+        '@overleaf/metrics': {
           timeAsyncMethod: sinon.stub()
         },
         'settings-sharelatex': this.settings,
@@ -47,8 +47,7 @@ describe('InstitutionsAPI', function() {
         },
         '../../../../../app/src/Features/V1/V1Api': {
           request: sinon.stub()
-        },
-        '../Errors/Errors': Errors
+        }
       }
     })
 
@@ -71,9 +70,7 @@ describe('InstitutionsAPI', function() {
           should.not.exist(err)
           this.request.calledOnce.should.equal(true)
           const requestOptions = this.request.lastCall.args[0]
-          const expectedUrl = `v1.url/api/v2/institutions/${
-            this.institutionId
-          }/affiliations`
+          const expectedUrl = `v1.url/api/v2/institutions/${this.institutionId}/affiliations`
           requestOptions.url.should.equal(expectedUrl)
           requestOptions.method.should.equal('GET')
           should.not.exist(requestOptions.body)
@@ -117,13 +114,11 @@ describe('InstitutionsAPI', function() {
           should.not.exist(err)
           this.request.calledOnce.should.equal(true)
           const requestOptions = this.request.lastCall.args[0]
-          const expectedUrl = `v1.url/api/v2/institutions/${
-            this.institutionId
-          }/institution_licences`
+          const expectedUrl = `v1.url/api/v2/institutions/${this.institutionId}/institution_licences`
           requestOptions.url.should.equal(expectedUrl)
           requestOptions.method.should.equal('GET')
-          requestOptions.body['start_date'].should.equal(startDate)
-          requestOptions.body['end_date'].should.equal(endDate)
+          requestOptions.body.start_date.should.equal(startDate)
+          requestOptions.body.end_date.should.equal(endDate)
           requestOptions.body.lag.should.equal('monthly')
           body.should.equal(responseBody)
           return done()
@@ -142,9 +137,7 @@ describe('InstitutionsAPI', function() {
           should.not.exist(err)
           this.request.calledOnce.should.equal(true)
           const requestOptions = this.request.lastCall.args[0]
-          const expectedUrl = `v1.url/api/v2/users/${
-            this.stubbedUser._id
-          }/affiliations`
+          const expectedUrl = `v1.url/api/v2/users/${this.stubbedUser._id}/affiliations`
           requestOptions.url.should.equal(expectedUrl)
           requestOptions.method.should.equal('GET')
           should.not.exist(requestOptions.body)
@@ -190,7 +183,8 @@ describe('InstitutionsAPI', function() {
         university: { id: 1 },
         role: 'Prof',
         department: 'Math',
-        confirmedAt: new Date()
+        confirmedAt: new Date(),
+        entitlement: true
       }
       return this.InstitutionsAPI.addAffiliation(
         this.stubbedUser._id,
@@ -200,19 +194,18 @@ describe('InstitutionsAPI', function() {
           should.not.exist(err)
           this.request.calledOnce.should.equal(true)
           const requestOptions = this.request.lastCall.args[0]
-          const expectedUrl = `v1.url/api/v2/users/${
-            this.stubbedUser._id
-          }/affiliations`
+          const expectedUrl = `v1.url/api/v2/users/${this.stubbedUser._id}/affiliations`
           requestOptions.url.should.equal(expectedUrl)
           requestOptions.method.should.equal('POST')
 
           const { body } = requestOptions
-          Object.keys(body).length.should.equal(5)
+          Object.keys(body).length.should.equal(7)
           body.email.should.equal(this.newEmail)
           body.university.should.equal(affiliationOptions.university)
           body.department.should.equal(affiliationOptions.department)
           body.role.should.equal(affiliationOptions.role)
           body.confirmedAt.should.equal(affiliationOptions.confirmedAt)
+          body.entitlement.should.equal(affiliationOptions.entitlement)
           this.markAsReadIpMatcher.calledOnce.should.equal(true)
           return done()
         }
@@ -249,9 +242,7 @@ describe('InstitutionsAPI', function() {
           should.not.exist(err)
           this.request.calledOnce.should.equal(true)
           const requestOptions = this.request.lastCall.args[0]
-          const expectedUrl = `v1.url/api/v2/users/${
-            this.stubbedUser._id
-          }/affiliations/remove`
+          const expectedUrl = `v1.url/api/v2/users/${this.stubbedUser._id}/affiliations/remove`
           requestOptions.url.should.equal(expectedUrl)
           requestOptions.method.should.equal('POST')
           expect(requestOptions.body).to.deep.equal({ email: this.newEmail })
@@ -283,9 +274,7 @@ describe('InstitutionsAPI', function() {
           should.not.exist(err)
           this.request.calledOnce.should.equal(true)
           const requestOptions = this.request.lastCall.args[0]
-          const expectedUrl = `v1.url/api/v2/users/${
-            this.stubbedUser._id
-          }/affiliations`
+          const expectedUrl = `v1.url/api/v2/users/${this.stubbedUser._id}/affiliations`
           requestOptions.url.should.equal(expectedUrl)
           requestOptions.method.should.equal('DELETE')
           return done()
@@ -321,9 +310,7 @@ describe('InstitutionsAPI', function() {
           should.not.exist(err)
           this.request.calledOnce.should.equal(true)
           const requestOptions = this.request.lastCall.args[0]
-          const expectedUrl = `v1.url/api/v2/users/${
-            this.stubbedUser._id
-          }/affiliations/endorse`
+          const expectedUrl = `v1.url/api/v2/users/${this.stubbedUser._id}/affiliations/endorse`
           requestOptions.url.should.equal(expectedUrl)
           requestOptions.method.should.equal('POST')
 

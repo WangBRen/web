@@ -2,7 +2,7 @@ const Path = require('path')
 const express = require('express')
 const Settings = require('settings-sharelatex')
 const logger = require('logger-sharelatex')
-const metrics = require('metrics-sharelatex')
+const metrics = require('@overleaf/metrics')
 const expressLocals = require('./ExpressLocals')
 const Validation = require('./Validation')
 const Router = require('../router')
@@ -28,12 +28,12 @@ const oneDayInMilliseconds = 86400000
 const ReferalConnect = require('../Features/Referal/ReferalConnect')
 const RedirectManager = require('./RedirectManager')
 const ProxyManager = require('./ProxyManager')
-const translations = require('translations-sharelatex').setup(Settings.i18n)
+const translations = require('./Translations')
 const Modules = require('./Modules')
 const Views = require('./Views')
 
 const ErrorController = require('../Features/Errors/ErrorController')
-const HttpErrorController = require('../Features/Errors/HttpErrorController')
+const HttpErrorHandler = require('../Features/Errors/HttpErrorHandler')
 const UserSessionsManager = require('../Features/User/UserSessionsManager')
 const AuthenticationController = require('../Features/Authentication/AuthenticationController')
 
@@ -69,6 +69,13 @@ if (Settings.behindProxy) {
         ', ' +
         req.headers['x-forwarded-for']
     }
+    next()
+  })
+}
+if (Settings.exposeHostname) {
+  const HOSTNAME = require('os').hostname()
+  app.use((req, res, next) => {
+    res.setHeader('X-Served-By', HOSTNAME)
     next()
   })
 }
@@ -143,8 +150,8 @@ Modules.applyNonCsrfRouter(webRouter, privateApiRouter, publicApiRouter)
 
 webRouter.csrf = new Csrf()
 webRouter.use(webRouter.csrf.middleware)
-webRouter.use(translations.expressMiddlewear)
-webRouter.use(translations.setLangBasedOnDomainMiddlewear)
+webRouter.use(translations.i18nMiddleware)
+webRouter.use(translations.setLangBasedOnDomainMiddleware)
 
 // Measure expiry from last request, not last login
 webRouter.use(function(req, res, next) {
@@ -178,8 +185,7 @@ webRouter.use(function(req, res, next) {
   ) {
     next()
   } else {
-    res.status(503)
-    res.render('general/closed', { title: 'maintenance' })
+    HttpErrorHandler.maintenance(req, res)
   }
 })
 
@@ -189,10 +195,11 @@ webRouter.use(function(req, res, next) {
   } else if (req.url.indexOf('/admin') === 0) {
     next()
   } else {
-    res.status(503)
-    res.render('general/closed', { title: 'maintenance' })
+    HttpErrorHandler.maintenance(req, res)
   }
 })
+
+webRouter.use(AuthenticationController.validateAdmin)
 
 // add security headers using Helmet
 const noCacheMiddleware = require('nocache')()
@@ -218,22 +225,14 @@ logger.info('creating HTTP server'.yellow)
 const server = require('http').createServer(app)
 
 // provide settings for separate web and api processes
-// if enableApiRouter and enableWebRouter are not defined they default
-// to true.
-const notDefined = x => x == null
-const enableApiRouter =
-  Settings.web != null ? Settings.web.enableApiRouter : undefined
-if (enableApiRouter || notDefined(enableApiRouter)) {
+if (Settings.enabledServices.includes('api')) {
   logger.info('providing api router')
   app.use(privateApiRouter)
   app.use(Validation.errorMiddleware)
-  app.use(HttpErrorController.handleError)
   app.use(ErrorController.handleApiError)
 }
 
-const enableWebRouter =
-  Settings.web != null ? Settings.web.enableWebRouter : undefined
-if (enableWebRouter || notDefined(enableWebRouter)) {
+if (Settings.enabledServices.includes('web')) {
   logger.info('providing web router')
 
   if (app.get('env') === 'production') {
@@ -247,12 +246,10 @@ if (enableWebRouter || notDefined(enableWebRouter)) {
 
   app.use(publicApiRouter) // public API goes with web router for public access
   app.use(Validation.errorMiddleware)
-  app.use(HttpErrorController.handleError)
   app.use(ErrorController.handleApiError)
 
   app.use(webRouter)
   app.use(Validation.errorMiddleware)
-  app.use(HttpErrorController.handleError)
   app.use(ErrorController.handleError)
 }
 

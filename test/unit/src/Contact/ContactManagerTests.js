@@ -29,12 +29,6 @@ describe('ContactManager', function() {
               url: 'contacts.sharelatex.com'
             }
           }
-        }),
-        'logger-sharelatex': (this.logger = {
-          log: sinon.stub(),
-          warn: sinon.stub(),
-          error: sinon.stub(),
-          err() {}
         })
       }
     })
@@ -65,9 +59,7 @@ describe('ContactManager', function() {
       it('should get the contacts from the contacts api', function() {
         return this.request.get
           .calledWith({
-            url: `${this.settings.apis.contacts.url}/user/${
-              this.user_id
-            }/contacts`,
+            url: `${this.settings.apis.contacts.url}/user/${this.user_id}/contacts`,
             qs: { limit: 42 },
             json: true,
             jar: false
@@ -108,23 +100,6 @@ describe('ContactManager', function() {
           )
           .should.equal(true)
       })
-
-      it('should log the error', function() {
-        this.logger.warn.should.have.been.calledWith(
-          {
-            err: sinon.match
-              .instanceOf(Error)
-              .and(
-                sinon.match.has(
-                  'message',
-                  'contacts api responded with non-success code: 500'
-                )
-              ),
-            user_id: this.user_id
-          },
-          'error getting contacts for user'
-        )
-      })
     })
   })
 
@@ -144,9 +119,7 @@ describe('ContactManager', function() {
       it('should add the contacts for the user in the contacts api', function() {
         return this.request.post
           .calledWith({
-            url: `${this.settings.apis.contacts.url}/user/${
-              this.user_id
-            }/contacts`,
+            url: `${this.settings.apis.contacts.url}/user/${this.user_id}/contacts`,
             json: {
               contact_id: this.contact_id
             },
@@ -183,26 +156,6 @@ describe('ContactManager', function() {
                   'contacts api responded with non-success code: 500'
                 )
               )
-          )
-          .should.equal(true)
-      })
-
-      it('should log the error', function() {
-        return this.logger.warn
-          .calledWith(
-            {
-              err: sinon.match
-                .instanceOf(Error)
-                .and(
-                  sinon.match.has(
-                    'message',
-                    'contacts api responded with non-success code: 500'
-                  )
-                ),
-              user_id: this.user_id,
-              contact_id: this.contact_id
-            },
-            'error adding contact for user'
           )
           .should.equal(true)
       })

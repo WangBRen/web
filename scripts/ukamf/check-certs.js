@@ -13,10 +13,11 @@
 const { Certificate } = require('@fidm/x509')
 const UKAMFDB = require('./ukamf-db')
 const V1Api = require(`../../app/src/Features/V1/V1Api`).promises
-const { db } = require('../../app/src/infrastructure/mongojs')
+const { db, waitForDb } = require('../../app/src/infrastructure/mongodb')
 const moment = require('moment')
 
-main()
+waitForDb()
+  .then(main)
   .catch(err => {
     console.error(err.stack)
   })
@@ -68,9 +69,7 @@ async function checkCert(ukamfDB, providerId) {
     // check expiration on configured certificate
     const certificate = Certificate.fromPEM(
       Buffer.from(
-        `-----BEGIN CERTIFICATE-----\n${
-          body.sso_cert
-        }\n-----END CERTIFICATE-----`,
+        `-----BEGIN CERTIFICATE-----\n${body.sso_cert}\n-----END CERTIFICATE-----`,
         'utf8'
       )
     )
@@ -93,17 +92,7 @@ async function checkCert(ukamfDB, providerId) {
 }
 
 async function getActiveProviderIds() {
-  return new Promise((resolve, reject) => {
-    db.users.distinct(
-      'samlIdentifiers.providerId',
-      { 'samlIdentifiers.externalUserId': { $exists: true } },
-      (err, providerIds) => {
-        if (err) {
-          reject(err)
-        } else {
-          resolve(providerIds)
-        }
-      }
-    )
+  return db.users.distinct('samlIdentifiers.providerId', {
+    'samlIdentifiers.externalUserId': { $exists: true }
   })
 }

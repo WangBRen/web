@@ -1,6 +1,6 @@
 const { callbackify } = require('util')
 const pLimit = require('p-limit')
-const { ObjectId } = require('mongojs')
+const { ObjectId } = require('mongodb')
 const OError = require('@overleaf/o-error')
 const { Project } = require('../../models/Project')
 const UserGetter = require('../User/UserGetter')
@@ -170,10 +170,7 @@ async function getAllInvitedMembers(projectId) {
     )
     return members
   } catch (err) {
-    throw new OError({
-      message: 'error getting members for project',
-      info: { projectId }
-    }).withCause(err)
+    throw OError.tag(err, 'error getting members for project', { projectId })
   }
 }
 

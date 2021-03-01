@@ -1,5 +1,5 @@
 /* eslint-disable
-    handle-callback-err,
+    node/handle-callback-err,
 */
 // TODO: This file was created by bulk-decaffeinate.
 // Fix any style issues and re-enable lint.
@@ -31,7 +31,7 @@ module.exports = SystemMessageManager = {
     if (callback == null) {
       callback = function(error) {}
     }
-    return SystemMessage.remove({}, callback)
+    return SystemMessage.deleteMany({}, callback)
   },
 
   createMessage(content, callback) {

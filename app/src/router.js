@@ -8,7 +8,7 @@ const Settings = require('settings-sharelatex')
 const TpdsController = require('./Features/ThirdPartyDataStore/TpdsController')
 const SubscriptionRouter = require('./Features/Subscription/SubscriptionRouter')
 const UploadsRouter = require('./Features/Uploads/UploadsRouter')
-const metrics = require('metrics-sharelatex')
+const metrics = require('@overleaf/metrics')
 const ReferalController = require('./Features/Referal/ReferalController')
 const AuthenticationController = require('./Features/Authentication/AuthenticationController')
 const TagsController = require('./Features/Tags/TagsController')
@@ -18,6 +18,7 @@ const UserInfoController = require('./Features/User/UserInfoController')
 const UserController = require('./Features/User/UserController')
 const UserEmailsController = require('./Features/User/UserEmailsController')
 const UserPagesController = require('./Features/User/UserPagesController')
+const UserOnboardingController = require('./Features/User/UserOnboardingController')
 const DocumentController = require('./Features/Documents/DocumentController')
 const CompileManager = require('./Features/Compile/CompileManager')
 const CompileController = require('./Features/Compile/CompileController')
@@ -39,8 +40,6 @@ const ContactRouter = require('./Features/Contacts/ContactRouter')
 const ReferencesController = require('./Features/References/ReferencesController')
 const AuthorizationMiddleware = require('./Features/Authorization/AuthorizationMiddleware')
 const BetaProgramController = require('./Features/BetaProgram/BetaProgramController')
-const SudoModeController = require('./Features/SudoMode/SudoModeController')
-const SudoModeMiddleware = require('./Features/SudoMode/SudoModeMiddleware')
 const AnalyticsRouter = require('./Features/Analytics/AnalyticsRouter')
 const MetaController = require('./Features/Metadata/MetaController')
 const TokenAccessController = require('./Features/TokenAccess/TokenAccessController')
@@ -50,6 +49,7 @@ const TemplatesRouter = require('./Features/Templates/TemplatesRouter')
 const InstitutionsController = require('./Features/Institutions/InstitutionsController')
 const UserMembershipRouter = require('./Features/UserMembership/UserMembershipRouter')
 const SystemMessageController = require('./Features/SystemMessages/SystemMessageController')
+const { Joi, validate } = require('./infrastructure/Validation')
 
 const logger = require('logger-sharelatex')
 const _ = require('underscore')
@@ -107,19 +107,12 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
     )
   }
 
-  webRouter.get('/user/activate', UserPagesController.activateAccountPage)
-  AuthenticationController.addEndpointToLoginWhitelist('/user/activate')
-
-  webRouter.get(
-    '/system/messages',
-    AuthenticationController.requireLogin(),
-    SystemMessageController.getMessages
-  )
+  // .getMessages will generate an empty response for anonymous users.
+  webRouter.get('/system/messages', SystemMessageController.getMessages)
 
   webRouter.get(
     '/user/settings',
     AuthenticationController.requireLogin(),
-    SudoModeMiddleware.protectPage,
     UserPagesController.settingsPage
   )
   webRouter.post(
@@ -205,7 +198,6 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
   webRouter.get(
     '/user/sessions',
     AuthenticationController.requireLogin(),
-    SudoModeMiddleware.protectPage,
     UserPagesController.sessionsPage
   )
   webRouter.post(
@@ -239,6 +231,12 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
     '/user/:user_id/personal_info',
     AuthenticationController.httpAuth,
     UserInfoController.getPersonalInfo
+  )
+
+  privateApiRouter.post(
+    '/user/onboarding_emails',
+    AuthenticationController.httpAuth,
+    UserOnboardingController.sendRecentSignupOnboardingEmails
   )
 
   webRouter.get(
@@ -372,6 +370,14 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
     CompileController.downloadPdf
   )
 
+  // Align with limits defined in CompileController.downloadPdf
+  const rateLimiterMiddlewareOutputFiles = RateLimiterMiddleware.rateLimit({
+    endpointName: 'misc-output-download',
+    params: ['Project_id'],
+    maxRequests: 1000,
+    timeInterval: 60 * 60
+  })
+
   // Used by the pdf viewers
   webRouter.get(
     /^\/project\/([^/]*)\/output\/(.*)$/,
@@ -383,6 +389,7 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
       req.params = params
       next()
     },
+    rateLimiterMiddlewareOutputFiles,
     AuthorizationMiddleware.ensureUserCanReadProject,
     CompileController.getFileFromClsi
   )
@@ -398,6 +405,7 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
       req.params = params
       next()
     },
+    rateLimiterMiddlewareOutputFiles,
     AuthorizationMiddleware.ensureUserCanReadProject,
     CompileController.getFileFromClsi
   )
@@ -414,6 +422,7 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
       req.params = params
       next()
     },
+    rateLimiterMiddlewareOutputFiles,
     AuthorizationMiddleware.ensureUserCanReadProject,
     CompileController.getFileFromClsi
   )
@@ -431,12 +440,14 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
       req.params = params
       next()
     },
+    rateLimiterMiddlewareOutputFiles,
     AuthorizationMiddleware.ensureUserCanReadProject,
     CompileController.getFileFromClsi
   )
 
   webRouter.delete(
     '/project/:Project_id/output',
+    validate({ query: { clsiserverid: Joi.string() } }),
     AuthorizationMiddleware.ensureUserCanReadProject,
     CompileController.deleteAuxFiles
   )
@@ -452,6 +463,7 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
   )
   webRouter.get(
     '/project/:Project_id/wordcount',
+    validate({ query: { clsiserverid: Joi.string() } }),
     AuthorizationMiddleware.ensureUserCanReadProject,
     CompileController.wordCount
   )
@@ -544,6 +556,11 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
   )
   webRouter.get(
     '/project/:project_id/version/:version/zip',
+    RateLimiterMiddleware.rateLimit({
+      endpointName: 'download-project-revision',
+      maxRequests: 30,
+      timeInterval: 60 * 60
+    }),
     AuthorizationMiddleware.ensureUserCanReadProject,
     HistoryController.downloadZipOfVersion
   )
@@ -605,13 +622,21 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
   webRouter.get(
     '/project/:project_id/metadata',
     AuthorizationMiddleware.ensureUserCanReadProject,
-    AuthenticationController.requireLogin(),
+    Settings.allowAnonymousReadAndWriteSharing
+      ? (req, res, next) => {
+          next()
+        }
+      : AuthenticationController.requireLogin(),
     MetaController.getMetadata
   )
   webRouter.post(
     '/project/:project_id/doc/:doc_id/metadata',
     AuthorizationMiddleware.ensureUserCanReadProject,
-    AuthenticationController.requireLogin(),
+    Settings.allowAnonymousReadAndWriteSharing
+      ? (req, res, next) => {
+          next()
+        }
+      : AuthenticationController.requireLogin(),
     MetaController.broadcastMetadataForDoc
   )
   privateApiRouter.post(
@@ -855,21 +880,6 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
     AuthenticationController.requireLogin(),
     BetaProgramController.optOut
   )
-  webRouter.get(
-    '/confirm-password',
-    AuthenticationController.requireLogin(),
-    SudoModeController.sudoModePrompt
-  )
-  webRouter.post(
-    '/confirm-password',
-    AuthenticationController.requireLogin(),
-    RateLimiterMiddleware.rateLimit({
-      endpointName: 'confirm-password',
-      maxRequests: 10,
-      timeInterval: 60
-    }),
-    SudoModeController.submitPassword
-  )
 
   // New "api" endpoints. Started as a way for v1 to call over to v2 (for
   // long-term features, as opposed to the nominally temporary ones in the
@@ -935,14 +945,19 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
     UserController.register
   )
   webRouter.post(
+    '/admin/openEditor',
+    AuthorizationMiddleware.ensureUserIsSiteAdmin,
+    AdminController.openEditor
+  )
+  webRouter.post(
     '/admin/closeEditor',
     AuthorizationMiddleware.ensureUserIsSiteAdmin,
     AdminController.closeEditor
   )
   webRouter.post(
-    '/admin/dissconectAllUsers',
+    '/admin/disconnectAllUsers',
     AuthorizationMiddleware.ensureUserIsSiteAdmin,
-    AdminController.dissconectAllUsers
+    AdminController.disconnectAllUsers
   )
   webRouter.post(
     '/admin/flushProjectToTpds',
@@ -967,14 +982,20 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
 
   privateApiRouter.post(
     '/disconnectAllUsers',
-    AdminController.dissconectAllUsers
+    AdminController.disconnectAllUsers
   )
 
   privateApiRouter.get('/perfTest', (req, res) => res.send('hello'))
 
-  publicApiRouter.get('/status', (req, res) =>
-    res.send('web sharelatex is alive (web)')
-  )
+  publicApiRouter.get('/status', (req, res) => {
+    if (!Settings.siteIsOpen) {
+      res.send('web site is closed (web)')
+    } else if (!Settings.editorIsOpen) {
+      res.send('web editor is closed (web)')
+    } else {
+      res.send('web sharelatex is alive (web)')
+    }
+  })
   privateApiRouter.get('/status', (req, res) =>
     res.send('web sharelatex is alive (api)')
   )
@@ -982,8 +1003,26 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
   // used by kubernetes health-check and acceptance tests
   webRouter.get('/dev/csrf', (req, res) => res.send(res.locals.csrfToken))
 
-  publicApiRouter.get('/health_check', HealthCheckController.check)
-  privateApiRouter.get('/health_check', HealthCheckController.checkApi)
+  publicApiRouter.get(
+    '/health_check',
+    HealthCheckController.checkActiveHandles,
+    HealthCheckController.check
+  )
+  privateApiRouter.get(
+    '/health_check',
+    HealthCheckController.checkActiveHandles,
+    HealthCheckController.checkApi
+  )
+  publicApiRouter.get(
+    '/health_check/full',
+    HealthCheckController.checkActiveHandles,
+    HealthCheckController.check
+  )
+  privateApiRouter.get(
+    '/health_check/full',
+    HealthCheckController.checkActiveHandles,
+    HealthCheckController.check
+  )
 
   publicApiRouter.get('/health_check/redis', HealthCheckController.checkRedis)
   privateApiRouter.get('/health_check/redis', HealthCheckController.checkRedis)

@@ -7,7 +7,7 @@ const SandboxedModule = require('sandboxed-module')
 const tk = require('timekeeper')
 const MockRequest = require('../helpers/MockRequest')
 const MockResponse = require('../helpers/MockResponse')
-const { ObjectId } = require('mongojs')
+const { ObjectId } = require('mongodb')
 
 describe('AuthenticationController', function() {
   beforeEach(function() {
@@ -23,11 +23,17 @@ describe('AuthenticationController', function() {
         console: console
       },
       requires: {
+        '../Helpers/AsyncFormHelper': (this.AsyncFormHelper = {
+          redirect: sinon.stub()
+        }),
+        '../../infrastructure/RequestContentTypeDetection': {
+          acceptsJson: (this.acceptsJson = sinon.stub().returns(false))
+        },
         './AuthenticationManager': (this.AuthenticationManager = {}),
         '../User/UserUpdater': (this.UserUpdater = {
           updateUser: sinon.stub()
         }),
-        'metrics-sharelatex': (this.Metrics = { inc: sinon.stub() }),
+        '@overleaf/metrics': (this.Metrics = { inc: sinon.stub() }),
         '../Security/LoginRateLimiter': (this.LoginRateLimiter = {
           processLoginRequest: sinon.stub(),
           recordSuccessfulLogin: sinon.stub()
@@ -46,10 +52,10 @@ describe('AuthenticationController', function() {
           error: sinon.stub(),
           err: sinon.stub()
         }),
-        'settings-sharelatex': {
+        'settings-sharelatex': (this.Settings = {
           siteUrl: 'http://www.foo.bar',
           httpAuthUsers: this.httpAuthUsers
-        },
+        }),
         passport: (this.passport = {
           authenticate: sinon.stub().returns(sinon.stub())
         }),
@@ -60,9 +66,6 @@ describe('AuthenticationController', function() {
         }),
         '../../infrastructure/Modules': (this.Modules = {
           hooks: { fire: sinon.stub().yields(null, []) }
-        }),
-        '../SudoMode/SudoModeHandler': (this.SudoModeHandler = {
-          activateSudoMode: sinon.stub().callsArgWith(1, null)
         }),
         '../Notifications/NotificationsBuilder': (this.NotificationsBuilder = {
           ipMatcherAffiliation: sinon.stub()
@@ -101,6 +104,80 @@ describe('AuthenticationController', function() {
 
   afterEach(function() {
     tk.reset()
+  })
+
+  describe('validateAdmin', function() {
+    beforeEach(function() {
+      this.Settings.adminDomains = ['good.example.com']
+      this.goodAdmin = {
+        email: 'alice@good.example.com',
+        isAdmin: true
+      }
+      this.badAdmin = {
+        email: 'beatrice@bad.example.com',
+        isAdmin: true
+      }
+      this.normalUser = {
+        email: 'claire@whatever.example.com',
+        isAdmin: false
+      }
+    })
+
+    it('should skip when adminDomains are not configured', function(done) {
+      this.Settings.adminDomains = []
+      this.AuthenticationController.getSessionUser = sinon
+        .stub()
+        .returns(this.normalUser)
+      this.AuthenticationController.validateAdmin(this.req, this.res, err => {
+        this.AuthenticationController.getSessionUser.called.should.equal(false)
+        expect(err).to.not.exist
+        done()
+      })
+    })
+
+    it('should skip non-admin user', function(done) {
+      this.AuthenticationController.getSessionUser = sinon
+        .stub()
+        .returns(this.normalUser)
+      this.AuthenticationController.validateAdmin(this.req, this.res, err => {
+        this.AuthenticationController.getSessionUser.called.should.equal(true)
+        expect(err).to.not.exist
+        done()
+      })
+    })
+
+    it('should permit an admin with the right doman', function(done) {
+      this.AuthenticationController.getSessionUser = sinon
+        .stub()
+        .returns(this.goodAdmin)
+      this.AuthenticationController.validateAdmin(this.req, this.res, err => {
+        this.AuthenticationController.getSessionUser.called.should.equal(true)
+        expect(err).to.not.exist
+        done()
+      })
+    })
+
+    it('should block an admin with a missing email', function(done) {
+      this.AuthenticationController.getSessionUser = sinon
+        .stub()
+        .returns({ isAdmin: true })
+      this.AuthenticationController.validateAdmin(this.req, this.res, err => {
+        this.AuthenticationController.getSessionUser.called.should.equal(true)
+        expect(err).to.exist
+        done()
+      })
+    })
+
+    it('should block an admin with a bad domain', function(done) {
+      this.AuthenticationController.getSessionUser = sinon
+        .stub()
+        .returns(this.badAdmin)
+      this.AuthenticationController.validateAdmin(this.req, this.res, err => {
+        this.AuthenticationController.getSessionUser.called.should.equal(true)
+        expect(err).to.exist
+        done()
+      })
+    })
   })
 
   describe('isUserLoggedIn', function() {
@@ -608,7 +685,7 @@ describe('AuthenticationController', function() {
 
     describe('with http auth', function() {
       beforeEach(function() {
-        this.req.headers['authorization'] = 'Mock Basic Auth'
+        this.req.headers.authorization = 'Mock Basic Auth'
         this.AuthenticationController.requireGlobalLogin(
           this.req,
           this.res,
@@ -821,12 +898,10 @@ describe('AuthenticationController', function() {
     })
 
     it("should update the user's login count and last logged in date", function() {
-      this.UserUpdater.updateUser.args[0][1]['$set'][
-        'lastLoggedIn'
-      ].should.not.equal(undefined)
-      this.UserUpdater.updateUser.args[0][1]['$inc']['loginCount'].should.equal(
-        1
+      this.UserUpdater.updateUser.args[0][1].$set.lastLoggedIn.should.not.equal(
+        undefined
       )
+      this.UserUpdater.updateUser.args[0][1].$inc.loginCount.should.equal(1)
     })
 
     it('should call the callback', function() {
@@ -965,7 +1040,7 @@ describe('AuthenticationController', function() {
       this.AuthenticationController._recordSuccessfulLogin = sinon.stub()
       this.AnalyticsManager.recordEvent = sinon.stub()
       this.AnalyticsManager.identifyUser = sinon.stub()
-      this.req.headers = { accept: 'application/json, whatever' }
+      this.acceptsJson.returns(true)
       this.res.json = sinon.stub()
       this.res.redirect = sinon.stub()
     })
@@ -1011,14 +1086,18 @@ describe('AuthenticationController', function() {
         this.res,
         this.next
       )
-      expect(this.res.json.callCount).to.equal(1)
-      expect(this.res.redirect.callCount).to.equal(0)
-      expect(this.res.json.calledWith({ redir: '/some/page' })).to.equal(true)
+      expect(
+        this.AsyncFormHelper.redirect.calledWith(
+          this.req,
+          this.res,
+          '/some/page'
+        )
+      ).to.equal(true)
     })
 
     describe('with a non-json request', function() {
       beforeEach(function() {
-        this.req.headers = {}
+        this.acceptsJson.returns(false)
         this.res.json = sinon.stub()
         this.res.redirect = sinon.stub()
       })
@@ -1030,9 +1109,13 @@ describe('AuthenticationController', function() {
           this.res,
           this.next
         )
-        expect(this.res.json.callCount).to.equal(0)
-        expect(this.res.redirect.callCount).to.equal(1)
-        expect(this.res.redirect.calledWith('/some/page')).to.equal(true)
+        expect(
+          this.AsyncFormHelper.redirect.calledWith(
+            this.req,
+            this.res,
+            '/some/page'
+          )
+        ).to.equal(true)
       })
     })
 
@@ -1072,7 +1155,7 @@ describe('AuthenticationController', function() {
           this.res,
           this.user
         )
-        expect(this.res.json.callCount).to.equal(1)
+        expect(this.AsyncFormHelper.redirect.called).to.equal(true)
       })
 
       it('stop if hook has redirected', function(done) {

@@ -2,7 +2,7 @@ const { Project } = require('../../models/Project')
 const PublicAccessLevels = require('../Authorization/PublicAccessLevels')
 const PrivilegeLevels = require('../Authorization/PrivilegeLevels')
 const UserGetter = require('../User/UserGetter')
-const { ObjectId } = require('mongojs')
+const { ObjectId } = require('mongodb')
 const Settings = require('settings-sharelatex')
 const logger = require('logger-sharelatex')
 const V1Api = require('../V1/V1Api')
@@ -164,7 +164,7 @@ const TokenAccessHandler = {
   addReadOnlyUserToProject(userId, projectId, callback) {
     userId = ObjectId(userId.toString())
     projectId = ObjectId(projectId.toString())
-    Project.update(
+    Project.updateOne(
       {
         _id: projectId
       },
@@ -178,7 +178,7 @@ const TokenAccessHandler = {
   addReadAndWriteUserToProject(userId, projectId, callback) {
     userId = ObjectId(userId.toString())
     projectId = ObjectId(projectId.toString())
-    Project.update(
+    Project.updateOne(
       {
         _id: projectId
       },

@@ -4,7 +4,7 @@ const crypto = require('crypto')
 const async = require('async')
 
 const settings = require('settings-sharelatex')
-const { ObjectId } = require('mongojs')
+const { ObjectId } = require('mongodb')
 
 const { Subscription } = require('../../models/Subscription')
 
@@ -190,9 +190,7 @@ var createInvite = function(subscription, email, inviter, callback) {
       const opts = {
         to: email,
         inviter,
-        acceptInviteUrl: `${settings.siteUrl}/subscription/invites/${
-          invite.token
-        }/`,
+        acceptInviteUrl: `${settings.siteUrl}/subscription/invites/${invite.token}/`,
         appName: settings.appName
       }
       EmailHandler.sendEmail('verifyEmailToJoinTeam', opts, error => {
@@ -209,7 +207,7 @@ var removeInviteFromTeam = function(subscriptionId, email, callback) {
 
   async.series(
     [
-      cb => Subscription.update(searchConditions, removeInvite, cb),
+      cb => Subscription.updateOne(searchConditions, removeInvite, cb),
       cb => removeLegacyInvite(subscriptionId, email, cb)
     ],
     callback
@@ -217,7 +215,7 @@ var removeInviteFromTeam = function(subscriptionId, email, callback) {
 }
 
 var removeLegacyInvite = (subscriptionId, email, callback) =>
-  Subscription.update(
+  Subscription.updateOne(
     {
       _id: new ObjectId(subscriptionId.toString())
     },
@@ -273,9 +271,7 @@ var checkIfInviteIsPossible = function(subscription, email, callback) {
 var getInviterName = function(inviter) {
   let inviterName
   if (inviter.first_name && inviter.last_name) {
-    inviterName = `${inviter.first_name} ${inviter.last_name} (${
-      inviter.email
-    })`
+    inviterName = `${inviter.first_name} ${inviter.last_name} (${inviter.email})`
   } else {
     inviterName = inviter.email
   }

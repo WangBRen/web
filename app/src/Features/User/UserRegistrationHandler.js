@@ -16,7 +16,8 @@ const UserRegistrationHandler = {
   _registrationRequestIsValid(body, callback) {
     const invalidEmail = AuthenticationManager.validateEmail(body.email || '')
     const invalidPassword = AuthenticationManager.validatePassword(
-      body.password || ''
+      body.password || '',
+      body.email
     )
     if (invalidEmail != null || invalidPassword != null) {
       return false
@@ -35,6 +36,7 @@ const UserRegistrationHandler = {
           first_name: userDetails.first_name,
           last_name: userDetails.last_name
         },
+        {},
         callback
       )
     } else {
@@ -63,14 +65,14 @@ const UserRegistrationHandler = {
         async.series(
           [
             cb =>
-              User.update(
+              User.updateOne(
                 { _id: user._id },
                 { $set: { holdingAccount: false } },
                 cb
               ),
             cb =>
               AuthenticationManager.setUserPassword(
-                user._id,
+                user,
                 userDetails.password,
                 cb
               ),
@@ -120,16 +122,14 @@ const UserRegistrationHandler = {
         const ONE_WEEK = 7 * 24 * 60 * 60 // seconds
         OneTimeTokenHandler.getNewToken(
           'password',
-          { user_id: user._id.toString(), email },
+          { user_id: user._id.toString(), email: user.email },
           { expiresIn: ONE_WEEK },
           (err, token) => {
             if (err != null) {
               return callback(err)
             }
 
-            const setNewPasswordUrl = `${
-              settings.siteUrl
-            }/user/activate?token=${token}&user_id=${user._id}`
+            const setNewPasswordUrl = `${settings.siteUrl}/user/activate?token=${token}&user_id=${user._id}`
 
             EmailHandler.sendEmail(
               'registered',

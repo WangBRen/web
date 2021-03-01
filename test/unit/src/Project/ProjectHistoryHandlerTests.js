@@ -19,7 +19,6 @@ const { expect } = chai
 const sinon = require('sinon')
 const modulePath = '../../../../app/src/Features/Project/ProjectHistoryHandler'
 const SandboxedModule = require('sandboxed-module')
-const { ObjectId } = require('mongoose').Types
 
 describe('ProjectHistoryHandler', function() {
   const project_id = '4eecb1c1bffa66588e0000a1'
@@ -32,6 +31,7 @@ describe('ProjectHistoryHandler', function() {
         static initClass() {
           this.prototype.rootFolder = [this.rootFolder]
         }
+
         constructor(options) {
           this._id = project_id
           this.name = 'project_name_here'
@@ -84,7 +84,9 @@ describe('ProjectHistoryHandler', function() {
           .stub()
           .withArgs(project_id)
           .callsArgWith(1, null, this.project)
-        this.ProjectModel.update = sinon.stub().callsArgWith(2, null, { n: 1 })
+        this.ProjectModel.updateOne = sinon
+          .stub()
+          .callsArgWith(2, null, { n: 1 })
         return this.ProjectHistoryHandler.ensureHistoryExistsForProject(
           project_id,
           this.callback
@@ -102,7 +104,7 @@ describe('ProjectHistoryHandler', function() {
       })
 
       it('should set the new history id on the project', function() {
-        return this.ProjectModel.update
+        return this.ProjectModel.updateOne
           .calledWith(
             { _id: project_id, 'overleaf.history.id': { $exists: false } },
             { 'overleaf.history.id': this.newHistoryId }
@@ -134,7 +136,7 @@ describe('ProjectHistoryHandler', function() {
           .stub()
           .withArgs(project_id)
           .callsArgWith(1, null, this.project)
-        this.ProjectModel.update = sinon.stub()
+        this.ProjectModel.updateOne = sinon.stub()
         return this.ProjectHistoryHandler.ensureHistoryExistsForProject(
           project_id,
           this.callback
@@ -152,7 +154,7 @@ describe('ProjectHistoryHandler', function() {
       })
 
       it('should not set the new history id on the project', function() {
-        return this.ProjectModel.update.called.should.equal(false)
+        return this.ProjectModel.updateOne.called.should.equal(false)
       })
 
       it('should not resync the project history', function() {

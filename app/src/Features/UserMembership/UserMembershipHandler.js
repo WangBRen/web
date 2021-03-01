@@ -1,8 +1,7 @@
 /* eslint-disable
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
     no-unused-vars,
-    standard/no-callback-literal,
 */
 // TODO: This file was created by bulk-decaffeinate.
 // Fix any style issues and re-enable lint.
@@ -13,7 +12,7 @@
  * DS207: Consider shorter variations of null checks
  * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
  */
-const { ObjectId } = require('mongoose').Types
+const { ObjectId } = require('mongodb')
 const async = require('async')
 const { promisifyAll } = require('../../util/promises')
 const Errors = require('../Errors/Errors')
@@ -114,7 +113,7 @@ var addUserToEntity = function(entity, attribute, user, callback) {
   }
   const fieldUpdate = {}
   fieldUpdate[attribute] = user._id
-  return entity.update({ $addToSet: fieldUpdate }, callback)
+  return entity.updateOne({ $addToSet: fieldUpdate }, callback)
 }
 
 var removeUserFromEntity = function(entity, attribute, userId, callback) {
@@ -123,7 +122,7 @@ var removeUserFromEntity = function(entity, attribute, userId, callback) {
   }
   const fieldUpdate = {}
   fieldUpdate[attribute] = userId
-  return entity.update({ $pull: fieldUpdate }, callback)
+  return entity.updateOne({ $pull: fieldUpdate }, callback)
 }
 
 var buildEntityQuery = function(entityId, entityConfig, loggedInUser) {

@@ -1,5 +1,3 @@
-/* eslint-disable
-*/
 // TODO: This file was created by bulk-decaffeinate.
 // Fix any style issues and re-enable lint.
 /*
@@ -30,6 +28,22 @@ App.filter(
         format = 'Do MMM YYYY, h:mm a'
       }
       return moment(date).format(format)
+    }
+)
+
+App.filter(
+  'utcDate',
+  () =>
+    function(date, format) {
+      if (!date) return 'N/A'
+      if (format == null) {
+        format = 'D MMM YYYY, HH:mm:ss'
+      }
+      return (
+        moment(date)
+          .utc()
+          .format(format) + ' UTC'
+      )
     }
 )
 

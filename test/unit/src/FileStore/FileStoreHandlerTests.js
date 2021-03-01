@@ -3,6 +3,7 @@ const sinon = require('sinon')
 const { expect } = require('chai')
 const SandboxedModule = require('sandboxed-module')
 const Errors = require('../../../../app/src/Features/Errors/Errors')
+const OError = require('@overleaf/o-error')
 
 const MODULE_PATH = '../../../../app/src/Features/FileStore/FileStoreHandler.js'
 
@@ -23,7 +24,6 @@ describe('FileStoreHandler', function() {
       my: 'writeStream',
       on(type, cb) {
         if (type === 'response') {
-          // eslint-disable-next-line standard/no-callback-literal
           cb({ statusCode: 200 })
         }
       }
@@ -75,7 +75,6 @@ describe('FileStoreHandler', function() {
         '../../models/File': {
           File: this.FileModel
         },
-        '../Errors/Errors': Errors,
         fs: this.fs
       }
     })
@@ -213,7 +212,6 @@ describe('FileStoreHandler', function() {
       beforeEach(function() {
         this.writeStream.on = function(type, cb) {
           if (type === 'response') {
-            // eslint-disable-next-line standard/no-callback-literal
             cb({ statusCode: 500 })
           }
         }
@@ -283,10 +281,13 @@ describe('FileStoreHandler', function() {
     })
 
     it('should wrap the error if there is one', function(done) {
-      const error = 'my error'
+      const error = new Error('my error')
       this.request.callsArgWith(1, error)
       this.handler.deleteProject(this.projectId, err => {
-        assert.equal(err.cause, error)
+        expect(OError.getFullStack(err)).to.match(
+          /something went wrong deleting a project in filestore/
+        )
+        expect(OError.getFullStack(err)).to.match(/my error/)
         done()
       })
     })
@@ -362,7 +363,7 @@ describe('FileStoreHandler', function() {
             this.request.callCount.should.equal(1)
             const { headers } = this.request.firstCall.args[0]
             expect(headers).to.have.keys('range')
-            expect(headers['range']).to.equal('bytes=0-10')
+            expect(headers.range).to.equal('bytes=0-10')
             done()
           }
         )
@@ -492,7 +493,7 @@ describe('FileStoreHandler', function() {
     })
 
     it('should return the err', function(done) {
-      const error = 'errrror'
+      const error = new Error('error')
       this.request.callsArgWith(1, error)
       this.handler.copyFile(
         this.projectId,

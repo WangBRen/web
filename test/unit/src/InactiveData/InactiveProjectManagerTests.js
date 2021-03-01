@@ -1,5 +1,5 @@
 /* eslint-disable
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
     no-return-assign,
     no-unused-vars,
@@ -21,6 +21,7 @@ const modulePath = path.join(
   '../../../../app/src/Features/InactiveData/InactiveProjectManager'
 )
 const { expect } = require('chai')
+const { ObjectId } = require('mongodb')
 
 describe('InactiveProjectManager', function() {
   beforeEach(function() {
@@ -40,6 +41,7 @@ describe('InactiveProjectManager', function() {
         console: console
       },
       requires: {
+        mongodb: { ObjectId },
         'settings-sharelatex': this.settings,
         'logger-sharelatex': {
           log() {},
@@ -79,12 +81,13 @@ describe('InactiveProjectManager', function() {
       )
     })
 
-    it('should not mark project as active if error with unarchinging', function(done) {
-      this.DocstoreManager.unarchiveProject.callsArgWith(1, 'error')
+    it('should not mark project as active if error with unarchiving', function(done) {
+      const error = new Error('error')
+      this.DocstoreManager.unarchiveProject.callsArgWith(1, error)
       return this.InactiveProjectManager.reactivateProjectIfRequired(
         this.project_id,
         err => {
-          err.should.equal('error')
+          err.should.equal(error)
           this.DocstoreManager.unarchiveProject
             .calledWith(this.project_id)
             .should.equal(true)
@@ -158,15 +161,3 @@ describe('InactiveProjectManager', function() {
     })
   })
 })
-
-// it "should not call markAsInactive if there was a problem archiving in track changes", (done)->
-// 	@DocstoreManager.archiveProject.callsArgWith(1)
-// 	@TrackChangesManager.archiveProject.callsArgWith(1, "errorrr")
-
-// 	@ProjectUpdateHandler.markAsInactive.callsArgWith(1)
-
-// 	@InactiveProjectManager.deactivateProject @project_id, (err)=>
-// 		err.should.equal "errorrr"
-// 		@DocstoreManager.archiveProject.calledWith(@project_id).should.equal true
-// 		@ProjectUpdateHandler.markAsInactive.calledWith(@project_id).should.equal false
-// 		done()

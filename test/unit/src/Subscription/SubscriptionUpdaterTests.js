@@ -3,8 +3,8 @@ const chai = require('chai')
 const sinon = require('sinon')
 const modulePath =
   '../../../../app/src/Features/Subscription/SubscriptionUpdater'
-const { assert } = require('chai')
-const { ObjectId } = require('mongoose').Types
+const { assert, expect } = require('chai')
+const { ObjectId } = require('mongodb')
 
 chai.should()
 
@@ -40,9 +40,6 @@ describe('SubscriptionUpdater', function() {
 
     this.updateStub = sinon.stub().callsArgWith(2, null)
     this.updateManyStub = sinon.stub().callsArgWith(2, null)
-    this.findAndModifyStub = sinon
-      .stub()
-      .callsArgWith(2, null, this.subscription)
     this.findOneAndUpdateStub = sinon
       .stub()
       .callsArgWith(2, null, this.subscription)
@@ -56,10 +53,9 @@ describe('SubscriptionUpdater', function() {
         return subscription
       }
     }
-    this.SubscriptionModel.remove = sinon.stub().yields()
-    this.SubscriptionModel.update = this.updateStub
+    this.SubscriptionModel.deleteOne = sinon.stub().yields()
+    this.SubscriptionModel.updateOne = this.updateStub
     this.SubscriptionModel.updateMany = this.updateManyStub
-    this.SubscriptionModel.findAndModify = this.findAndModifyStub
     this.SubscriptionModel.findOneAndUpdate = this.findOneAndUpdateStub
 
     this.SubscriptionLocator = {
@@ -98,6 +94,7 @@ describe('SubscriptionUpdater', function() {
         console: console
       },
       requires: {
+        mongodb: { ObjectId },
         '../../models/Subscription': {
           Subscription: this.SubscriptionModel
         },
@@ -110,6 +107,7 @@ describe('SubscriptionUpdater', function() {
           warn() {}
         },
         'settings-sharelatex': this.Settings,
+        '../../infrastructure/mongodb': { db: {}, ObjectId },
         './FeaturesUpdater': this.FeaturesUpdater,
         '../../models/DeletedSubscription': {
           DeletedSubscription: this.DeletedSubscription
@@ -136,8 +134,8 @@ describe('SubscriptionUpdater', function() {
             $set: { admin_id: ObjectId(this.otherUserId) },
             $addToSet: { manager_ids: ObjectId(this.otherUserId) }
           }
-          this.SubscriptionModel.update.should.have.been.calledOnce
-          this.SubscriptionModel.update.should.have.been.calledWith(
+          this.SubscriptionModel.updateOne.should.have.been.calledOnce
+          this.SubscriptionModel.updateOne.should.have.been.calledWith(
             query,
             update
           )
@@ -164,8 +162,8 @@ describe('SubscriptionUpdater', function() {
               manager_ids: [ObjectId(this.otherUserId)]
             }
           }
-          this.SubscriptionModel.update.should.have.been.calledOnce
-          this.SubscriptionModel.update.should.have.been.calledWith(
+          this.SubscriptionModel.updateOne.should.have.been.calledOnce
+          this.SubscriptionModel.updateOne.should.have.been.calledWith(
             query,
             update
           )
@@ -351,6 +349,71 @@ describe('SubscriptionUpdater', function() {
         }
       )
     })
+
+    describe('when the plan allows adding more seats', function() {
+      beforeEach(function() {
+        this.membersLimitAddOn = 'add_on1'
+        this.PlansLocator.findLocalPlanInSettings
+          .withArgs(this.recurlySubscription.plan.plan_code)
+          .returns({
+            groupPlan: true,
+            membersLimit: 5,
+            membersLimitAddOn: this.membersLimitAddOn
+          })
+      })
+
+      function expectMembersLimit(limit) {
+        it('should set the membersLimit accordingly', function(done) {
+          this.SubscriptionUpdater._updateSubscriptionFromRecurly(
+            this.recurlySubscription,
+            this.subscription,
+            {},
+            error => {
+              if (error) return done(error)
+
+              expect(this.subscription.membersLimit).to.equal(limit)
+              done()
+            }
+          )
+        })
+      }
+
+      describe('when the recurlySubscription does not have add ons', function() {
+        beforeEach(function() {
+          delete this.recurlySubscription.subscription_add_ons
+        })
+        expectMembersLimit(5)
+      })
+
+      describe('when the recurlySubscription has non-matching add ons', function() {
+        beforeEach(function() {
+          this.recurlySubscription.subscription_add_ons = [
+            { add_on_code: 'add_on_99', quantity: 3 }
+          ]
+        })
+        expectMembersLimit(5)
+      })
+
+      describe('when the recurlySubscription has a matching add on', function() {
+        beforeEach(function() {
+          this.recurlySubscription.subscription_add_ons = [
+            { add_on_code: this.membersLimitAddOn, quantity: 10 }
+          ]
+        })
+        expectMembersLimit(15)
+      })
+
+      // NOTE: This is unexpected, but we are going to support it anyways.
+      describe('when the recurlySubscription has multiple matching add ons', function() {
+        beforeEach(function() {
+          this.recurlySubscription.subscription_add_ons = [
+            { add_on_code: this.membersLimitAddOn, quantity: 10 },
+            { add_on_code: this.membersLimitAddOn, quantity: 3 }
+          ]
+        })
+        expectMembersLimit(18)
+      })
+    })
   })
 
   describe('_createNewSubscription', function() {
@@ -400,7 +463,7 @@ describe('SubscriptionUpdater', function() {
           const insertOperation = {
             $addToSet: { member_ids: { $each: [this.otherUserId] } }
           }
-          this.findAndModifyStub
+          this.updateStub
             .calledWith(searchOps, insertOperation)
             .should.equal(true)
           done()
@@ -487,7 +550,7 @@ describe('SubscriptionUpdater', function() {
     })
 
     it('should remove the subscription', function() {
-      this.SubscriptionModel.remove
+      this.SubscriptionModel.deleteOne
         .calledWith({ _id: this.subscription._id })
         .should.equal(true)
     })

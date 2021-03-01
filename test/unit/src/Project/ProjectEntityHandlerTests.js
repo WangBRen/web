@@ -20,7 +20,6 @@ const { expect } = chai
 const sinon = require('sinon')
 const modulePath = '../../../../app/src/Features/Project/ProjectEntityHandler'
 const SandboxedModule = require('sandboxed-module')
-const { ObjectId } = require('mongoose').Types
 const Errors = require('../../../../app/src/Features/Errors/Errors')
 
 describe('ProjectEntityHandler', function() {
@@ -41,6 +40,7 @@ describe('ProjectEntityHandler', function() {
         static initClass() {
           this.prototype.rootFolder = [this.rootFolder]
         }
+
         constructor(options) {
           this._id = project_id
           this.name = 'project_name_here'
@@ -75,7 +75,6 @@ describe('ProjectEntityHandler', function() {
         '../../models/Project': {
           Project: this.ProjectModel
         },
-        '../Errors/Errors': Errors,
         './ProjectLocator': this.ProjectLocator,
         './ProjectGetter': (this.ProjectGetter = {}),
         '../ThirdPartyDataStore/TpdsUpdateSender': this.TpdsUpdateSender

@@ -9,6 +9,7 @@ class MockRequest {
   static initClass() {
     this.prototype.session = { destroy() {} }
 
+    this.prototype.headers = {}
     this.prototype.params = {}
     this.prototype.query = {}
     this.prototype.body = {}
@@ -22,6 +23,7 @@ class MockRequest {
     this.prototype.accepts = () => {}
     this.prototype.setHeader = () => {}
   }
+
   param(param) {
     return this.params[param]
   }

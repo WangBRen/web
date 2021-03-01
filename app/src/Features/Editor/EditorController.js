@@ -1,6 +1,6 @@
 /* eslint-disable
     camelcase,
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
     no-dupe-keys,
     no-unused-vars,
@@ -14,7 +14,8 @@
  * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
  */
 const logger = require('logger-sharelatex')
-const Metrics = require('metrics-sharelatex')
+const OError = require('@overleaf/o-error')
+const Metrics = require('@overleaf/metrics')
 const sanitize = require('sanitizer')
 const ProjectEntityUpdateHandler = require('../Project/ProjectEntityUpdateHandler')
 const ProjectOptionsHandler = require('../Project/ProjectOptionsHandler')
@@ -68,10 +69,10 @@ const EditorController = {
       user_id,
       (err, doc, folder_id) => {
         if (err != null) {
-          logger.warn(
-            { err, project_id, docName },
-            'error adding doc without lock'
-          )
+          OError.tag(err, 'error adding doc without lock', {
+            project_id,
+            docName
+          })
           return callback(err)
         }
         EditorRealTimeController.emitToRoom(
@@ -79,7 +80,8 @@ const EditorController = {
           'reciveNewDoc',
           folder_id,
           doc,
-          source
+          source,
+          user_id
         )
         return callback(err, doc)
       }
@@ -110,10 +112,11 @@ const EditorController = {
       user_id,
       (err, fileRef, folder_id) => {
         if (err != null) {
-          logger.warn(
-            { err, project_id, folder_id, fileName },
-            'error adding file without lock'
-          )
+          OError.tag(err, 'error adding file without lock', {
+            project_id,
+            folder_id,
+            fileName
+          })
           return callback(err)
         }
         EditorRealTimeController.emitToRoom(
@@ -122,7 +125,8 @@ const EditorController = {
           folder_id,
           fileRef,
           source,
-          linkedFileData
+          linkedFileData,
+          user_id
         )
         return callback(err, fileRef)
       }
@@ -155,7 +159,8 @@ const EditorController = {
             'reciveNewDoc',
             folder_id,
             doc,
-            source
+            source,
+            user_id
           )
         }
         return callback(err, doc)
@@ -203,7 +208,8 @@ const EditorController = {
           folder_id,
           newFile,
           source,
-          linkedFileData
+          linkedFileData,
+          user_id
         )
         return callback(null, newFile)
       }
@@ -241,7 +247,8 @@ const EditorController = {
                 'reciveNewDoc',
                 lastFolder._id,
                 doc,
-                source
+                source,
+                user_id
               )
             }
             return callback()
@@ -293,7 +300,8 @@ const EditorController = {
               lastFolder._id,
               newFile,
               source,
-              linkedFileData
+              linkedFileData,
+              user_id
             )
             return callback()
           }
@@ -302,7 +310,7 @@ const EditorController = {
     )
   },
 
-  addFolder(project_id, folder_id, folderName, source, callback) {
+  addFolder(project_id, folder_id, folderName, source, userId, callback) {
     if (callback == null) {
       callback = function(error, folder) {}
     }
@@ -314,16 +322,19 @@ const EditorController = {
       folderName,
       (err, folder, folder_id) => {
         if (err != null) {
-          logger.warn(
-            { err, project_id, folder_id, folderName, source },
-            'could not add folder'
-          )
+          OError.tag(err, 'could not add folder', {
+            project_id,
+            folder_id,
+            folderName,
+            source
+          })
           return callback(err)
         }
         return EditorController._notifyProjectUsersOfNewFolder(
           project_id,
           folder_id,
           folder,
+          userId,
           function(err) {
             if (err != null) {
               return callback(err)
@@ -345,7 +356,10 @@ const EditorController = {
       path,
       (err, newFolders, lastFolder) => {
         if (err != null) {
-          logger.warn({ err, project_id, path }, 'could not mkdirp')
+          OError.tag(err, 'could not mkdirp', {
+            project_id,
+            path
+          })
           return callback(err)
         }
 
@@ -375,10 +389,11 @@ const EditorController = {
       userId,
       function(err) {
         if (err != null) {
-          logger.warn(
-            { err, project_id, entity_id, entityType },
-            'could not delete entity'
-          )
+          OError.tag(err, 'could not delete entity', {
+            project_id,
+            entity_id,
+            entityType
+          })
           return callback(err)
         }
         logger.log(
@@ -426,9 +441,13 @@ const EditorController = {
       description,
       function(err) {
         if (err != null) {
-          logger.warn(
-            { err, project_id, description },
-            'something went wrong setting the project description'
+          OError.tag(
+            err,
+            'something went wrong setting the project description',
+            {
+              project_id,
+              description
+            }
           )
           return callback(err)
         }
@@ -461,10 +480,12 @@ const EditorController = {
       userId,
       function(err) {
         if (err != null) {
-          logger.warn(
-            { err, project_id, entity_id, entityType, newName },
-            'error renaming entity'
-          )
+          OError.tag(err, 'error renaming entity', {
+            project_id,
+            entity_id,
+            entityType,
+            newName
+          })
           return callback(err)
         }
         if (newName.length > 0) {
@@ -493,10 +514,11 @@ const EditorController = {
       userId,
       function(err) {
         if (err != null) {
-          logger.warn(
-            { err, project_id, entity_id, folder_id },
-            'error moving entity'
-          )
+          OError.tag(err, 'error moving entity', {
+            project_id,
+            entity_id,
+            folder_id
+          })
           return callback(err)
         }
         EditorRealTimeController.emitToRoom(
@@ -518,7 +540,10 @@ const EditorController = {
       err
     ) {
       if (err != null) {
-        logger.warn({ err, project_id, newName }, 'error renaming project')
+        OError.tag(err, 'error renaming project', {
+          project_id,
+          newName
+        })
         return callback(err)
       }
       EditorRealTimeController.emitToRoom(
@@ -659,13 +684,20 @@ const EditorController = {
           project_id,
           folder.parentFolder_id,
           folder,
+          null,
           cb
         ),
       callback
     )
   },
 
-  _notifyProjectUsersOfNewFolder(project_id, folder_id, folder, callback) {
+  _notifyProjectUsersOfNewFolder(
+    project_id,
+    folder_id,
+    folder,
+    userId,
+    callback
+  ) {
     if (callback == null) {
       callback = function(error) {}
     }
@@ -673,7 +705,8 @@ const EditorController = {
       project_id,
       'reciveNewFolder',
       folder_id,
-      folder
+      folder,
+      userId
     )
     return callback()
   }

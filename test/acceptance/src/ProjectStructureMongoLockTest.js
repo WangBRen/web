@@ -1,5 +1,5 @@
 /* eslint-disable
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
 */
 // TODO: This file was created by bulk-decaffeinate.
@@ -32,6 +32,14 @@ const _ = require('lodash')
 
 describe('ProjectStructureMongoLock', function() {
   describe('whilst a project lock is taken', function() {
+    let oldMaxLockWaitTime
+    before(function() {
+      oldMaxLockWaitTime = LockManager.MAX_LOCK_WAIT_TIME
+    })
+    after(function() {
+      LockManager.MAX_LOCK_WAIT_TIME = oldMaxLockWaitTime
+    })
+
     beforeEach(function(done) {
       // We want to instantly fail if the lock is taken
       LockManager.MAX_LOCK_WAIT_TIME = 1
@@ -40,7 +48,7 @@ describe('ProjectStructureMongoLock', function() {
         holdingAccount: false,
         email: 'test@example.com'
       }
-      UserCreator.createNewUser(userDetails, (err, user) => {
+      UserCreator.createNewUser(userDetails, {}, (err, user) => {
         this.user = user
         if (err != null) {
           throw err
@@ -119,7 +127,7 @@ describe('ProjectStructureMongoLock', function() {
           { _id: true },
           (err, project) => {
             expect(err).to.equal(null)
-            expect(project._id).to.deep.equal(this.locked_project._id)
+            expect(project).to.have.same.id(this.locked_project)
             return done()
           }
         )
@@ -159,7 +167,7 @@ describe('ProjectStructureMongoLock', function() {
           this.unlocked_project._id,
           (err, project) => {
             expect(err).to.equal(null)
-            expect(project._id).to.deep.equal(this.unlocked_project._id)
+            expect(project).to.have.same.id(this.unlocked_project)
             return done()
           }
         )

@@ -1,5 +1,5 @@
 /* eslint-disable
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
     no-return-assign,
     no-unused-vars,
@@ -19,6 +19,7 @@ const modulePath =
   '../../../../app/src/Features/Authorization/AuthorizationManager.js'
 const SandboxedModule = require('sandboxed-module')
 const Errors = require('../../../../app/src/Features/Errors/Errors.js')
+const { ObjectId } = require('mongodb')
 
 describe('AuthorizationManager', function() {
   beforeEach(function() {
@@ -27,13 +28,13 @@ describe('AuthorizationManager', function() {
         console: console
       },
       requires: {
+        mongodb: { ObjectId },
         '../Collaborators/CollaboratorsGetter': (this.CollaboratorsGetter = {}),
         '../Collaborators/CollaboratorsHandler': (this.CollaboratorsHandler = {}),
         '../Project/ProjectGetter': (this.ProjectGetter = {}),
         '../../models/User': {
           User: (this.User = {})
         },
-        '../Errors/Errors': Errors,
         '../TokenAccess/TokenAccessHandler': (this.TokenAccessHandler = {
           validateTokenForAnonymousAccess: sinon
             .stub()

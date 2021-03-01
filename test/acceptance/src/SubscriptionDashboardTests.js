@@ -1,5 +1,5 @@
 /* eslint-disable
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
 */
 // TODO: This file was created by bulk-decaffeinate.
@@ -17,9 +17,15 @@ const { Subscription } = require('../../../app/src/models/Subscription')
 const { Institution } = require('../../../app/src/models/Institution')
 const SubscriptionViewModelBuilder = require('../../../app/src/Features/Subscription/SubscriptionViewModelBuilder')
 const RecurlySubscription = require('./helpers/RecurlySubscription')
+const MockRecurlyApiClass = require('./mocks/MockRecurlyApi')
+const MockV1ApiClass = require('./mocks/MockV1Api')
 
-const MockRecurlyApi = require('./helpers/MockRecurlyApi')
-const MockV1Api = require('./helpers/MockV1Api')
+let MockV1Api, MockRecurlyApi
+
+before(function() {
+  MockV1Api = MockV1ApiClass.instance()
+  MockRecurlyApi = MockRecurlyApiClass.instance()
+})
 
 describe('Subscriptions', function() {
   describe('dashboard', function() {
@@ -103,7 +109,7 @@ describe('Subscriptions', function() {
         MockRecurlyApi.mockSubscriptions = []
         MockRecurlyApi.coupons = {}
         MockRecurlyApi.redemptions = {}
-        Subscription.remove(
+        Subscription.deleteOne(
           {
             admin_id: this.user._id
           },
@@ -134,7 +140,9 @@ describe('Subscriptions', function() {
             account_code: this.user._id,
             email: 'mock@email.com',
             hosted_login_token: 'mock-login-token'
-          }
+          },
+          additionalLicenses: 0,
+          totalLicenses: 0
         })
       })
 
@@ -207,7 +215,7 @@ describe('Subscriptions', function() {
       })
 
       after(function(done) {
-        Subscription.remove(
+        Subscription.deleteOne(
           {
             admin_id: this.user._id
           },
@@ -277,7 +285,7 @@ describe('Subscriptions', function() {
       })
 
       after(function(done) {
-        Subscription.remove(
+        Subscription.deleteOne(
           {
             admin_id: this.owner1._id
           },
@@ -285,7 +293,7 @@ describe('Subscriptions', function() {
             if (error != null) {
               return done(error)
             }
-            return Subscription.remove(
+            return Subscription.deleteOne(
               {
                 admin_id: this.owner2._id
               },
@@ -349,7 +357,7 @@ describe('Subscriptions', function() {
       })
 
       after(function(done) {
-        Subscription.remove(
+        Subscription.deleteOne(
           {
             admin_id: this.owner1._id
           },
@@ -406,7 +414,7 @@ describe('Subscriptions', function() {
       })
 
       after(function(done) {
-        Institution.remove(
+        Institution.deleteOne(
           {
             v1Id: this.v1Id
           },
@@ -429,7 +437,7 @@ describe('Subscriptions', function() {
           subscription: {},
           subscription_status: {}
         })
-        MockV1Api.setAffiliations([
+        MockV1Api.setAffiliations(this.user._id, [
           {
             email: 'confirmed-affiliation-email@stanford.example.edu',
             licence: 'pro_plus',
@@ -516,10 +524,14 @@ describe('Subscriptions', function() {
             department: 'Math',
             role: 'Prof',
             inferred: false,
+            inReconfirmNotificationPeriod: false,
             institution: {
               name: 'Stanford',
               confirmed: true
-            }
+            },
+            lastDayToReconfirm: undefined,
+            pastReconfirmDate: false,
+            portal: undefined
           }
         ])
       })

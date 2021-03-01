@@ -40,8 +40,7 @@ describe('OneTimeTokenHandler', function() {
         crypto: {
           randomBytes: () => this.stubbedToken
         },
-        '../Errors/Errors': Errors,
-        '../../infrastructure/mongojs': {
+        '../../infrastructure/mongodb': {
           db: (this.db = { tokens: {} })
         }
       }
@@ -54,7 +53,7 @@ describe('OneTimeTokenHandler', function() {
 
   describe('getNewToken', function() {
     beforeEach(function() {
-      return (this.db.tokens.insert = sinon.stub().yields())
+      return (this.db.tokens.insertOne = sinon.stub().yields())
     })
 
     describe('normally', function() {
@@ -67,7 +66,7 @@ describe('OneTimeTokenHandler', function() {
       })
 
       it('should insert a generated token with a 1 hour expiry', function() {
-        return this.db.tokens.insert
+        return this.db.tokens.insertOne
           .calledWith({
             use: 'password',
             token: this.stubbedToken,
@@ -96,7 +95,7 @@ describe('OneTimeTokenHandler', function() {
       })
 
       it('should insert a generated token with a custom expiry', function() {
-        return this.db.tokens.insert
+        return this.db.tokens.insertOne
           .calledWith({
             use: 'password',
             token: this.stubbedToken,
@@ -118,9 +117,9 @@ describe('OneTimeTokenHandler', function() {
   describe('getValueFromTokenAndExpire', function() {
     describe('successfully', function() {
       beforeEach(function() {
-        this.db.tokens.findAndModify = sinon
+        this.db.tokens.findOneAndUpdate = sinon
           .stub()
-          .yields(null, { data: 'mock-data' })
+          .yields(null, { value: { data: 'mock-data' } })
         return this.OneTimeTokenHandler.getValueFromTokenAndExpire(
           'password',
           'mock-token',
@@ -129,18 +128,18 @@ describe('OneTimeTokenHandler', function() {
       })
 
       it('should expire the token', function() {
-        return this.db.tokens.findAndModify
-          .calledWith({
-            query: {
+        return this.db.tokens.findOneAndUpdate
+          .calledWith(
+            {
               use: 'password',
               token: 'mock-token',
               expiresAt: { $gt: new Date() },
               usedAt: { $exists: false }
             },
-            update: {
+            {
               $set: { usedAt: new Date() }
             }
-          })
+          )
           .should.equal(true)
       })
 
@@ -151,7 +150,9 @@ describe('OneTimeTokenHandler', function() {
 
     describe('when a valid token is not found', function() {
       beforeEach(function() {
-        this.db.tokens.findAndModify = sinon.stub().yields(null, null)
+        this.db.tokens.findOneAndUpdate = sinon
+          .stub()
+          .yields(null, { value: null })
         return this.OneTimeTokenHandler.getValueFromTokenAndExpire(
           'password',
           'mock-token',

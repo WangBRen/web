@@ -1,5 +1,5 @@
 /* eslint-disable
-    handle-callback-err,
+    node/handle-callback-err,
     no-return-assign,
     no-unused-vars,
 */
@@ -34,9 +34,33 @@ describe('siteIsOpen', function() {
     })
 
     it('should return maintenance page', function(done) {
-      return request.get('/login', (error, response) => {
+      request.get('/login', (error, response, body) => {
         response.statusCode.should.equal(503)
-        return done()
+        body.should.match(/is currently down for maintenance/)
+        done()
+      })
+    })
+
+    it('should return a plain text message for a json request', function(done) {
+      request.get('/some/route', { json: true }, (error, response, body) => {
+        response.statusCode.should.equal(503)
+        body.message.should.match(/maintenance/)
+        body.message.should.match(/status.overleaf.com/)
+        done()
+      })
+    })
+
+    it('should return a 200 on / for load balancer health checks', function(done) {
+      request.get('/', (error, response, body) => {
+        response.statusCode.should.equal(200)
+        done()
+      })
+    })
+
+    it('should return a 200 on /status for readiness checks', function(done) {
+      request.get('/status', (error, response, body) => {
+        response.statusCode.should.equal(200)
+        done()
       })
     })
   })

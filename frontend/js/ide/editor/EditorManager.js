@@ -1,10 +1,10 @@
 import _ from 'lodash'
 /* eslint-disable
-    camelcase,
-    handle-callback-err,
-    max-len,
-    no-return-assign,
-*/
+   camelcase,
+   node/handle-callback-err,
+   max-len,
+   no-return-assign,
+ */
 // TODO: This file was created by bulk-decaffeinate.
 // Fix any style issues and re-enable lint.
 /*
@@ -21,13 +21,15 @@ import './directives/toggleSwitch'
 import './controllers/SavingNotificationController'
 let EditorManager
 
-export default (EditorManager = (function() {
+export default EditorManager = (function() {
   EditorManager = class EditorManager {
     static initClass() {
       this.prototype._syncTimeout = null
     }
+
     constructor(ide, $scope, localStorage) {
       this.ide = ide
+      this.editorOpenDocEpoch = 0 // track pending document loads
       this.$scope = $scope
       this.localStorage = localStorage
       this.$scope.editor = {
@@ -44,6 +46,12 @@ export default (EditorManager = (function() {
         if (this.$scope.ui.view !== 'history' && entity.type === 'doc') {
           return this.openDoc(entity)
         }
+      })
+
+      this.$scope.$on('entity:no-selection', () => {
+        this.$scope.$apply(() => {
+          this.$scope.ui.view = null
+        })
       })
 
       this.$scope.$on('entity:deleted', (event, entity) => {
@@ -124,6 +132,15 @@ export default (EditorManager = (function() {
       return this.openDoc(doc, options)
     }
 
+    jumpToLine(options) {
+      return this.$scope.$broadcast(
+        'editor:gotoLine',
+        options.gotoLine,
+        options.gotoColumn,
+        options.syncToPdf
+      )
+    }
+
     openDoc(doc, options) {
       if (options == null) {
         options = {}
@@ -131,18 +148,13 @@ export default (EditorManager = (function() {
       sl_console.log(`[openDoc] Opening ${doc.id}`)
       this.$scope.ui.view = 'editor'
 
-      const done = () => {
+      const done = isNewDoc => {
+        this.$scope.$broadcast('doc:after-opened', { isNewDoc })
         if (options.gotoLine != null) {
           // allow Ace to display document before moving, delay until next tick
           // added delay to make this happen later that gotoStoredPosition in
           // CursorPositionManager
-          return setTimeout(() => {
-            return this.$scope.$broadcast(
-              'editor:gotoLine',
-              options.gotoLine,
-              options.gotoColumn
-            )
-          }, 0)
+          return setTimeout(() => this.jumpToLine(options), 0)
         } else if (options.gotoOffset != null) {
           return setTimeout(() => {
             return this.$scope.$broadcast(
@@ -160,7 +172,7 @@ export default (EditorManager = (function() {
         // automatically update the file tree whenever the file is opened
         this.ide.fileTreeManager.selectEntity(doc)
         this.$scope.$apply(() => {
-          return done()
+          return done(false)
         })
         return
       }
@@ -174,6 +186,12 @@ export default (EditorManager = (function() {
 
       this.$scope.editor.opening = true
       return this._openNewDocument(doc, (error, sharejs_doc) => {
+        if (error && error.message === 'another document was loaded') {
+          sl_console.log(
+            `[openDoc] another document was loaded while ${doc.id} was loading`
+          )
+          return
+        }
         if (error != null) {
           this.ide.showGenericMessageModal(
             'Error opening document',
@@ -189,41 +207,85 @@ export default (EditorManager = (function() {
         return this.$scope.$apply(() => {
           this.$scope.editor.opening = false
           this.$scope.editor.sharejs_doc = sharejs_doc
-          return done()
+          return done(true)
         })
       })
     }
 
     _openNewDocument(doc, callback) {
+      // Leave the current document
+      //  - when we are opening a different new one, to avoid race conditions
+      //     between leaving and joining the same document
+      //  - when the current one has pending ops that need flushing, to avoid
+      //     race conditions from cleanup
+      const current_sharejs_doc = this.$scope.editor.sharejs_doc
+      const currentDocId = current_sharejs_doc && current_sharejs_doc.doc_id
+      const hasBufferedOps =
+        current_sharejs_doc && current_sharejs_doc.hasBufferedOps()
+      const changingDoc = current_sharejs_doc && currentDocId !== doc.id
+      if (changingDoc || hasBufferedOps) {
+        sl_console.log('[_openNewDocument] Leaving existing open doc...')
+
+        // Do not trigger any UI changes from remote operations
+        this._unbindFromDocumentEvents(current_sharejs_doc)
+        // Keep listening for out-of-sync and similar errors.
+        this._attachErrorHandlerToDocument(doc, current_sharejs_doc)
+
+        // Teardown the Document -> ShareJsDoc -> sharejs doc
+        // By the time this completes, the Document instance is no longer
+        //  registered in Document.openDocs and _doOpenNewDocument can start
+        //  from scratch -- read: no corrupted internal state.
+        const editorOpenDocEpoch = ++this.editorOpenDocEpoch
+        current_sharejs_doc.leaveAndCleanUp(error => {
+          if (error) {
+            sl_console.log(
+              `[_openNewDocument] error leaving doc ${currentDocId}`,
+              error
+            )
+            return callback(error)
+          }
+          if (this.editorOpenDocEpoch !== editorOpenDocEpoch) {
+            sl_console.log(
+              `[openNewDocument] editorOpenDocEpoch mismatch ${this.editorOpenDocEpoch} vs ${editorOpenDocEpoch}`
+            )
+            return callback(new Error('another document was loaded'))
+          }
+          this._doOpenNewDocument(doc, callback)
+        })
+      } else {
+        this._doOpenNewDocument(doc, callback)
+      }
+    }
+
+    _doOpenNewDocument(doc, callback) {
       if (callback == null) {
         callback = function(error, sharejs_doc) {}
       }
-      sl_console.log('[_openNewDocument] Opening...')
-      const current_sharejs_doc = this.$scope.editor.sharejs_doc
+      sl_console.log('[_doOpenNewDocument] Opening...')
       const new_sharejs_doc = Document.getDocument(this.ide, doc.id)
-      // Leave the current document only when we are opening a different new
-      // one, to avoid race conditions between leaving and joining the same
-      // document.
-      if (
-        current_sharejs_doc != null &&
-        current_sharejs_doc !== new_sharejs_doc
-      ) {
-        sl_console.log('[_openNewDocument] Leaving existing open doc...')
-        current_sharejs_doc.leaveAndCleanUp()
-        this._unbindFromDocumentEvents(current_sharejs_doc)
-      }
-
+      const editorOpenDocEpoch = ++this.editorOpenDocEpoch
       return new_sharejs_doc.join(error => {
         if (error != null) {
+          sl_console.log(
+            `[_doOpenNewDocument] error joining doc ${doc.id}`,
+            error
+          )
           return callback(error)
+        }
+        if (this.editorOpenDocEpoch !== editorOpenDocEpoch) {
+          sl_console.log(
+            `[openNewDocument] editorOpenDocEpoch mismatch ${this.editorOpenDocEpoch} vs ${editorOpenDocEpoch}`
+          )
+          new_sharejs_doc.leaveAndCleanUp()
+          return callback(new Error('another document was loaded'))
         }
         this._bindToDocumentEvents(doc, new_sharejs_doc)
         return callback(null, new_sharejs_doc)
       })
     }
 
-    _bindToDocumentEvents(doc, sharejs_doc) {
-      sharejs_doc.on('error', (error, meta) => {
+    _attachErrorHandlerToDocument(doc, sharejs_doc) {
+      sharejs_doc.on('error', (error, meta, editorContent) => {
         let message
         if ((error != null ? error.message : undefined) != null) {
           ;({ message } = error)
@@ -243,19 +305,42 @@ export default (EditorManager = (function() {
             'Sorry, this file has too many comments or tracked changes. Please try accepting or rejecting some existing changes, or resolving and deleting some comments.'
           )
         } else {
-          this.ide.socket.disconnect()
+          // Do not allow this doc to open another error modal.
+          sharejs_doc.off('error')
+
+          // Preserve the sharejs contents before the teardown.
+          editorContent =
+            typeof editorContent === 'string'
+              ? editorContent
+              : sharejs_doc.doc._doc.snapshot
+
+          // Tear down the ShareJsDoc.
+          if (sharejs_doc.doc) sharejs_doc.doc.clearInflightAndPendingOps()
+
+          // Do not re-join after re-connecting.
+          sharejs_doc.leaveAndCleanUp()
+          this.ide.connectionManager.disconnect({ permanent: true })
           this.ide.reportError(error, meta)
+
+          // Tell the user about the error state.
+          this.$scope.editor.error_state = true
           this.ide.showOutOfSyncModal(
             'Out of sync',
-            "Sorry, this file has gone out of sync and we need to do a full refresh. <br> <a href='/learn/Kb/Editor_out_of_sync_problems'>Please see this help guide for more information</a>",
-            sharejs_doc.doc._doc.snapshot
+            "Sorry, this file has gone out of sync and we need to do a full refresh. <br> <a target='_blank' rel='noopener noreferrer' href='/learn/Kb/Editor_out_of_sync_problems'>Please see this help guide for more information</a>",
+            editorContent
           )
+          // Do not forceReopen the document.
+          return
         }
         const removeHandler = this.$scope.$on('project:joined', () => {
           this.openDoc(doc, { forceReopen: true })
           removeHandler()
         })
       })
+    }
+
+    _bindToDocumentEvents(doc, sharejs_doc) {
+      this._attachErrorHandlerToDocument(doc, sharejs_doc)
 
       return sharejs_doc.on('externalUpdate', update => {
         if (this._ignoreExternalUpdates) {
@@ -295,6 +380,7 @@ export default (EditorManager = (function() {
     stopIgnoringExternalUpdates() {
       return (this._ignoreExternalUpdates = false)
     }
+
     _syncTrackChangesState(doc) {
       let tryToggle
       if (doc == null) {
@@ -328,4 +414,4 @@ export default (EditorManager = (function() {
   }
   EditorManager.initClass()
   return EditorManager
-})())
+})()

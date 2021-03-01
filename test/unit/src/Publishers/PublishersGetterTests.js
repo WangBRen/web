@@ -1,5 +1,5 @@
 /* eslint-disable
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
     no-return-assign,
     no-unused-vars,
@@ -49,9 +49,7 @@ describe('PublishersGetter', function() {
           }
         }),
         'logger-sharelatex': {
-          log() {
-            return console.log(arguments)
-          },
+          log() {},
           err() {}
         }
       }

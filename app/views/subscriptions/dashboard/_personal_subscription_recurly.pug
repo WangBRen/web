@@ -7,12 +7,15 @@ div(ng-controller="RecurlySubscriptionController")
 	div(ng-show="!showCancellation")
 		case personalSubscription.recurly.state
 			when "active"
-				p !{translate("currently_subscribed_to_plan", {planName:"<strong>" + personalSubscription.plan.name + "</strong>"})}
-					|
-					a(href, ng-click="switchToChangePlanView()", ng-if="showChangePlanButton") &nbsp;!{translate("change_plan")}.
+				p !{translate("currently_subscribed_to_plan", {planName: personalSubscription.plan.name}, ['strong'])}
+					-if (personalSubscription.recurly.additionalLicenses > 0)
+						|
+						| !{translate("additional_licenses", {additionalLicenses: personalSubscription.recurly.additionalLicenses, totalLicenses: personalSubscription.recurly.totalLicenses}, ['strong', 'strong'])}
+					| &nbsp;
+					a(href, ng-click="switchToChangePlanView()", ng-if="showChangePlanButton") !{translate("change_plan")}.
 				-if (personalSubscription.recurly.trialEndsAtFormatted && personalSubscription.recurly.trial_ends_at > Date.now())
 					p You're on a free trial which ends on <strong ng-non-bindable>#{personalSubscription.recurly.trialEndsAtFormatted}</strong>
-				p !{translate("next_payment_of_x_collectected_on_y", {paymentAmmount:"<strong>" + personalSubscription.recurly.price + "</strong>", collectionDate:"<strong>" + personalSubscription.recurly.nextPaymentDueAt + "</strong>"})}
+				p !{translate("next_payment_of_x_collectected_on_y", {paymentAmmount: personalSubscription.recurly.price, collectionDate: personalSubscription.recurly.nextPaymentDueAt}, ['strong', 'strong'])}
 				include ./../_price_exceptions
 				p.pull-right
 				p
@@ -22,8 +25,8 @@ div(ng-controller="RecurlySubscriptionController")
 					| &nbsp;
 					a(href, ng-click="switchToCancellationView()", ng-hide="recurlyLoadError").btn.btn-danger !{translate("cancel_your_subscription")}
 			when "canceled"
-				p !{translate("currently_subscribed_to_plan", {planName:"<strong>" + personalSubscription.plan.name + "</strong>"})}
-				p !{translate("subscription_canceled_and_terminate_on_x", {terminateDate:"<strong>" + personalSubscription.recurly.nextPaymentDueAt + "</strong>"})}
+				p !{translate("currently_subscribed_to_plan", {planName: personalSubscription.plan.name}, ['strong'])}
+				p !{translate("subscription_canceled_and_terminate_on_x", {terminateDate: personalSubscription.recurly.nextPaymentDueAt}, ['strong'])}
 				p
 					a(href=personalSubscription.recurly.accountManagementLink, target="_blank").btn.btn-info #{translate("view_your_invoices")}
 					p: form(action="/user/subscription/reactivate",method="post")
@@ -56,7 +59,7 @@ div(ng-controller="RecurlySubscriptionController")
 
 	.div(ng-controller="RecurlyCancellationController", ng-show="showCancellation").text-center
 		p
-			strong #{translate("sure_you_want_to_cancel")}
+			strong #{translate("wed_love_you_to_stay")}
 
 		div(ng-show="showExtendFreeTrial")
 			p !{translate("have_more_days_to_try", {days:14})}
@@ -69,7 +72,7 @@ div(ng-controller="RecurlySubscriptionController")
 			div(ng-controller="ChangePlanFormController")
 				p !{translate("interested_in_cheaper_plan",{price:'{{studentPrice}}'})}
 				p
-					button(type="submit", ng-click="downgradeToStudent()", ng-disabled='inflight').btn.btn-info #{translate("yes_please")}
+					button(type="submit", ng-click="downgradeToStudent()", ng-disabled='inflight').btn.btn-success #{translate("yes_move_me_to_student_plan")}
 				p
 					a(href, ng-click="cancelSubscription()", ng-disabled='inflight')  #{translate("no_thanks_cancel_now")}
 
@@ -83,7 +86,7 @@ script(type='text/ng-template', id='confirmChangePlanModalTemplate')
 	.modal-header
 		h3 #{translate("change_plan")}
 	.modal-body
-		p !{translate("sure_you_want_to_change_plan", {planName:"<strong>{{plan.name}}</strong>"})}
+		p !{translate("sure_you_want_to_change_plan", {planName: '{{plan.name}}'}, ['strong'])}
 	.modal-footer
 		button.btn.btn-default(
 			ng-disabled="inflight"
@@ -95,4 +98,3 @@ script(type='text/ng-template', id='confirmChangePlanModalTemplate')
 		)
 			span(ng-hide="inflight") #{translate("change_plan")}
 			span(ng-show="inflight") #{translate("processing")}…
-

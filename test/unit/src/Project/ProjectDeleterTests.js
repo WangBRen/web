@@ -7,7 +7,7 @@ const tk = require('timekeeper')
 const moment = require('moment')
 const { Project } = require('../helpers/models/Project')
 const { DeletedProject } = require('../helpers/models/DeletedProject')
-const { ObjectId } = require('mongoose').Types
+const { ObjectId } = require('mongodb')
 const Errors = require('../../../../app/src/Features/Errors/Errors')
 
 describe('ProjectDeleter', function() {
@@ -41,7 +41,12 @@ describe('ProjectDeleter', function() {
           deletedProjectId: '5cf9270b4eff6e186cf8b05e'
         },
         project: {
-          _id: '5cf9270b4eff6e186cf8b05e'
+          _id: '5cf9270b4eff6e186cf8b05e',
+          overleaf: {
+            history: {
+              id: new ObjectId()
+            }
+          }
         }
       },
       {
@@ -106,12 +111,13 @@ describe('ProjectDeleter', function() {
 
     this.db = {
       projects: {
-        insert: sinon.stub().yields()
+        insertOne: sinon.stub().resolves()
       }
     }
 
     this.DocstoreManager = {
       promises: {
+        archiveProject: sinon.stub().resolves(),
         destroyProject: sinon.stub().resolves()
       }
     }
@@ -143,10 +149,9 @@ describe('ProjectDeleter', function() {
         '../Collaborators/CollaboratorsGetter': this.CollaboratorsGetter,
         '../Docstore/DocstoreManager': this.DocstoreManager,
         './ProjectDetailsHandler': this.ProjectDetailsHandler,
-        '../../infrastructure/mongojs': { db: this.db, ObjectId },
+        '../../infrastructure/mongodb': { db: this.db, ObjectId },
         '../History/HistoryManager': this.HistoryManager,
-        'logger-sharelatex': this.logger,
-        '../Errors/Errors': Errors
+        'logger-sharelatex': this.logger
       },
       globals: {
         console: console
@@ -162,7 +167,7 @@ describe('ProjectDeleter', function() {
 
   describe('mark as deleted by external source', function() {
     beforeEach(function() {
-      this.ProjectMock.expects('update')
+      this.ProjectMock.expects('updateOne')
         .withArgs(
           { _id: this.project._id },
           { deletedByExternalDataSource: true }
@@ -191,7 +196,7 @@ describe('ProjectDeleter', function() {
 
   describe('unmarkAsDeletedByExternalSource', function() {
     beforeEach(async function() {
-      this.ProjectMock.expects('update')
+      this.ProjectMock.expects('updateOne')
         .withArgs(
           { _id: this.project._id },
           { deletedByExternalDataSource: false }
@@ -220,11 +225,11 @@ describe('ProjectDeleter', function() {
           .withArgs({ _id: project._id })
           .chain('exec')
           .resolves(project)
-        this.ProjectMock.expects('remove')
+        this.ProjectMock.expects('deleteOne')
           .withArgs({ _id: project._id })
           .chain('exec')
           .resolves()
-        this.DeletedProjectMock.expects('update')
+        this.DeletedProjectMock.expects('updateOne')
           .withArgs(
             { 'deleterData.deletedProjectId': project._id },
             {
@@ -284,10 +289,10 @@ describe('ProjectDeleter', function() {
       this.deleterData.deleterIpAddress = this.ip
       this.deleterData.deleterId = this.user._id
 
-      this.ProjectMock.expects('remove')
+      this.ProjectMock.expects('deleteOne')
         .chain('exec')
         .resolves()
-      this.DeletedProjectMock.expects('update')
+      this.DeletedProjectMock.expects('updateOne')
         .withArgs(
           { 'deleterData.deletedProjectId': this.project._id },
           {
@@ -306,10 +311,10 @@ describe('ProjectDeleter', function() {
     })
 
     it('should flushProjectToMongoAndDelete in doc updater', async function() {
-      this.ProjectMock.expects('remove')
+      this.ProjectMock.expects('deleteOne')
         .chain('exec')
         .resolves()
-      this.DeletedProjectMock.expects('update').resolves()
+      this.DeletedProjectMock.expects('updateOne').resolves()
 
       await this.ProjectDeleter.promises.deleteProject(this.project._id, {
         deleterUser: this.user,
@@ -320,11 +325,37 @@ describe('ProjectDeleter', function() {
         .should.equal(true)
     })
 
-    it('should removeProjectFromAllTags', async function() {
-      this.ProjectMock.expects('remove')
+    it('should flush docs out of mongo', async function() {
+      this.ProjectMock.expects('deleteOne')
         .chain('exec')
         .resolves()
-      this.DeletedProjectMock.expects('update').resolves()
+      this.DeletedProjectMock.expects('updateOne').resolves()
+      await this.ProjectDeleter.promises.deleteProject(this.project._id, {
+        deleterUser: this.user,
+        ipAddress: this.ip
+      })
+      expect(
+        this.DocstoreManager.promises.archiveProject
+      ).to.have.been.calledWith(this.project._id)
+    })
+
+    it('should flush docs out of mongo and ignore errors', async function() {
+      this.ProjectMock.expects('deleteOne')
+        .chain('exec')
+        .resolves()
+      this.DeletedProjectMock.expects('updateOne').resolves()
+      this.DocstoreManager.promises.archiveProject.rejects(new Error('foo'))
+      await this.ProjectDeleter.promises.deleteProject(this.project._id, {
+        deleterUser: this.user,
+        ipAddress: this.ip
+      })
+    })
+
+    it('should removeProjectFromAllTags', async function() {
+      this.ProjectMock.expects('deleteOne')
+        .chain('exec')
+        .resolves()
+      this.DeletedProjectMock.expects('updateOne').resolves()
 
       await this.ProjectDeleter.promises.deleteProject(this.project._id)
       sinon.assert.calledWith(
@@ -340,11 +371,11 @@ describe('ProjectDeleter', function() {
     })
 
     it('should remove the project from Mongo', async function() {
-      this.ProjectMock.expects('remove')
+      this.ProjectMock.expects('deleteOne')
         .withArgs({ _id: this.project._id })
         .chain('exec')
         .resolves()
-      this.DeletedProjectMock.expects('update').resolves()
+      this.DeletedProjectMock.expects('updateOne').resolves()
 
       await this.ProjectDeleter.promises.deleteProject(this.project._id)
       this.ProjectMock.verify()
@@ -372,7 +403,7 @@ describe('ProjectDeleter', function() {
           })
           .chain('exec')
           .resolves(deletedProject)
-        this.DeletedProjectMock.expects('update')
+        this.DeletedProjectMock.expects('updateOne')
           .withArgs(
             {
               _id: deletedProject._id
@@ -398,7 +429,7 @@ describe('ProjectDeleter', function() {
 
   describe('expireDeletedProject', function() {
     beforeEach(async function() {
-      this.DeletedProjectMock.expects('update')
+      this.DeletedProjectMock.expects('updateOne')
         .withArgs(
           {
             _id: this.deletedProjects[0]._id
@@ -435,10 +466,13 @@ describe('ProjectDeleter', function() {
       ).to.have.been.calledWith(this.deletedProjects[0].project._id)
     })
 
-    it('should delete the project in project-history', function() {
+    it('should delete the project in history', function() {
       expect(
         this.HistoryManager.promises.deleteProject
-      ).to.have.been.calledWith(this.deletedProjects[0].project._id)
+      ).to.have.been.calledWith(
+        this.deletedProjects[0].project._id,
+        this.deletedProjects[0].project.overleaf.history.id
+      )
     })
 
     it('should destroy the files in filestore', function() {
@@ -458,7 +492,7 @@ describe('ProjectDeleter', function() {
         .chain('exec')
         .resolves(this.project)
 
-      this.ProjectMock.expects('update')
+      this.ProjectMock.expects('updateOne')
         .withArgs(
           { _id: this.project._id },
           {
@@ -500,7 +534,7 @@ describe('ProjectDeleter', function() {
         .chain('exec')
         .resolves(this.project)
 
-      this.ProjectMock.expects('update')
+      this.ProjectMock.expects('updateOne')
         .withArgs({ _id: this.project._id }, { $set: { archived: archived } })
         .resolves()
     })
@@ -536,7 +570,7 @@ describe('ProjectDeleter', function() {
         .chain('exec')
         .resolves(this.project)
 
-      this.ProjectMock.expects('update')
+      this.ProjectMock.expects('updateOne')
         .withArgs(
           { _id: this.project._id },
           {
@@ -575,7 +609,7 @@ describe('ProjectDeleter', function() {
         .chain('exec')
         .resolves(this.project)
 
-      this.ProjectMock.expects('update')
+      this.ProjectMock.expects('updateOne')
         .withArgs(
           { _id: this.project._id },
           { $pull: { trashed: ObjectId(this.user._id) } }
@@ -594,7 +628,7 @@ describe('ProjectDeleter', function() {
 
   describe('restoreProject', function() {
     beforeEach(function() {
-      this.ProjectMock.expects('update')
+      this.ProjectMock.expects('updateOne')
         .withArgs(
           {
             _id: this.project._id
@@ -662,7 +696,7 @@ describe('ProjectDeleter', function() {
     it('should insert the project into the collection', async function() {
       await this.ProjectDeleter.promises.undeleteProject(this.project._id)
       sinon.assert.calledWith(
-        this.db.projects.insert,
+        this.db.projects.insertOne,
         sinon.match({
           _id: this.project._id,
           name: this.project.name
@@ -674,7 +708,7 @@ describe('ProjectDeleter', function() {
       this.project.archived = true
       await this.ProjectDeleter.promises.undeleteProject(this.project._id)
       sinon.assert.calledWith(
-        this.db.projects.insert,
+        this.db.projects.insertOne,
         sinon.match({ archived: undefined })
       )
     })

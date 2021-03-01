@@ -2,30 +2,46 @@ const sinon = require('sinon')
 const assertCalledWith = sinon.assert.calledWith
 const assertNotCalled = sinon.assert.notCalled
 const chai = require('chai')
-const { assert } = chai
+const { assert, expect } = chai
 const modulePath = '../../../../app/src/Features/User/UserEmailsController.js'
 const SandboxedModule = require('sandboxed-module')
 const MockRequest = require('../helpers/MockRequest')
+const MockResponse = require('../helpers/MockResponse')
 const Errors = require('../../../../app/src/Features/Errors/Errors')
 
 describe('UserEmailsController', function() {
   beforeEach(function() {
     this.req = new MockRequest()
-    this.user = { _id: 'mock-user-id' }
+    this.req.sessionID = Math.random().toString()
+    this.res = new MockResponse()
+    this.next = sinon.stub()
+    this.user = { _id: 'mock-user-id', email: 'example@overleaf.com' }
 
-    this.UserGetter = { getUserFullEmails: sinon.stub() }
+    this.UserGetter = {
+      getUserFullEmails: sinon.stub(),
+      promises: {
+        getUser: sinon.stub().resolves(this.user)
+      }
+    }
     this.AuthenticationController = {
+      getSessionUser: sinon.stub().returns(this.user),
       getLoggedInUserId: sinon.stub().returns(this.user._id),
       setInSessionUser: sinon.stub()
     }
     this.Features = {
       hasFeature: sinon.stub()
     }
+    this.UserSessionsManager = {
+      revokeAllUserSessions: sinon.stub().yields()
+    }
     this.UserUpdater = {
       addEmailAddress: sinon.stub(),
       removeEmailAddress: sinon.stub(),
       setDefaultEmailAddress: sinon.stub(),
-      updateV1AndSetDefaultEmailAddress: sinon.stub()
+      updateV1AndSetDefaultEmailAddress: sinon.stub(),
+      promises: {
+        addEmailAddress: sinon.stub().resolves()
+      }
     }
     this.EmailHelper = { parseEmail: sinon.stub() }
     this.endorseAffiliation = sinon.stub().yields()
@@ -38,6 +54,7 @@ describe('UserEmailsController', function() {
         .withArgs('example.com')
         .resolves({ sso_enabled: false })
     }
+    this.HttpErrorHandler = { conflict: sinon.stub() }
     this.UserEmailsController = SandboxedModule.require(modulePath, {
       globals: {
         console: console
@@ -46,18 +63,27 @@ describe('UserEmailsController', function() {
         '../Authentication/AuthenticationController': this
           .AuthenticationController,
         '../../infrastructure/Features': this.Features,
+        './UserSessionsManager': this.UserSessionsManager,
         './UserGetter': this.UserGetter,
         './UserUpdater': this.UserUpdater,
+        '../Email/EmailHandler': (this.EmailHandler = {
+          promises: {
+            sendEmail: sinon.stub().resolves()
+          }
+        }),
         '../Helpers/EmailHelper': this.EmailHelper,
-        './UserEmailsConfirmationHandler': (this.UserEmailsConfirmationHandler = {}),
+        './UserEmailsConfirmationHandler': (this.UserEmailsConfirmationHandler = {
+          promises: {
+            sendConfirmationEmail: sinon.stub().resolves()
+          }
+        }),
         '../Institutions/InstitutionsAPI': this.InstitutionsAPI,
-        '../Errors/Errors': Errors,
-        'logger-sharelatex': {
-          log() {
-            console.log(arguments)
-          },
+        '../Errors/HttpErrorHandler': this.HttpErrorHandler,
+        'logger-sharelatex': (this.logger = {
+          log() {},
+          warn: sinon.stub(),
           err() {}
-        }
+        })
       }
     })
   })
@@ -92,55 +118,130 @@ describe('UserEmailsController', function() {
       this.UserEmailsConfirmationHandler.sendConfirmationEmail = sinon
         .stub()
         .yields()
-      this.UserUpdater.addEmailAddress.callsArgWith(3, null)
+    })
+
+    it('passed audit log to addEmailAddress', function(done) {
+      this.res.sendStatus = sinon.stub()
+      this.res.sendStatus.callsFake(() => {
+        const addCall = this.UserUpdater.promises.addEmailAddress.lastCall
+        expect(addCall.args[3]).to.deep.equal({
+          initiatorId: this.user._id,
+          ipAddress: this.req.ip
+        })
+        done()
+      })
+      this.UserEmailsController.add(this.req, this.res)
     })
 
     it('adds new email', function(done) {
-      this.UserEmailsController.add(this.req, {
-        sendStatus: code => {
-          code.should.equal(204)
-          assertCalledWith(this.EmailHelper.parseEmail, this.newEmail)
-          assertCalledWith(
-            this.UserUpdater.addEmailAddress,
-            this.user._id,
-            this.newEmail
-          )
+      this.UserEmailsController.add(
+        this.req,
+        {
+          sendStatus: code => {
+            code.should.equal(204)
+            assertCalledWith(this.EmailHelper.parseEmail, this.newEmail)
+            assertCalledWith(
+              this.UserUpdater.promises.addEmailAddress,
+              this.user._id,
+              this.newEmail
+            )
 
-          const affiliationOptions = this.UserUpdater.addEmailAddress.lastCall
-            .args[2]
-          Object.keys(affiliationOptions).length.should.equal(3)
-          affiliationOptions.university.should.equal(this.req.body.university)
-          affiliationOptions.department.should.equal(this.req.body.department)
-          affiliationOptions.role.should.equal(this.req.body.role)
+            const affiliationOptions = this.UserUpdater.promises.addEmailAddress
+              .lastCall.args[2]
+            Object.keys(affiliationOptions).length.should.equal(3)
+            affiliationOptions.university.should.equal(this.req.body.university)
+            affiliationOptions.department.should.equal(this.req.body.department)
+            affiliationOptions.role.should.equal(this.req.body.role)
 
-          done()
-        }
+            done()
+          }
+        },
+        this.next
+      )
+    })
+
+    it('sends a security alert email', function(done) {
+      this.res.sendStatus = sinon.stub()
+      this.res.sendStatus.callsFake(() => {
+        const emailCall = this.EmailHandler.promises.sendEmail.getCall(0)
+        emailCall.args[0].should.to.equal('securityAlert')
+        emailCall.args[1].to.should.equal(this.user.email)
+        emailCall.args[1].actionDescribed.should.contain(
+          'a secondary email address'
+        )
+        emailCall.args[1].to.should.equal(this.user.email)
+        emailCall.args[1].message[0].should.contain(this.newEmail)
+        done()
       })
+
+      this.UserEmailsController.add(this.req, this.res)
     })
 
     it('sends an email confirmation', function(done) {
-      this.UserEmailsController.add(this.req, {
-        sendStatus: code => {
-          code.should.equal(204)
-          assertCalledWith(
-            this.UserEmailsConfirmationHandler.sendConfirmationEmail,
-            this.user._id,
-            this.newEmail
-          )
-          done()
-        }
-      })
+      this.UserEmailsController.add(
+        this.req,
+        {
+          sendStatus: code => {
+            code.should.equal(204)
+            assertCalledWith(
+              this.UserEmailsConfirmationHandler.promises.sendConfirmationEmail,
+              this.user._id,
+              this.newEmail
+            )
+            done()
+          }
+        },
+        this.next
+      )
     })
 
     it('handles email parse error', function(done) {
       this.EmailHelper.parseEmail.returns(null)
-      this.UserEmailsController.add(this.req, {
-        sendStatus: code => {
-          code.should.equal(422)
-          assertNotCalled(this.UserUpdater.addEmailAddress)
-          done()
-        }
+      this.UserEmailsController.add(
+        this.req,
+        {
+          sendStatus: code => {
+            code.should.equal(422)
+            assertNotCalled(this.UserUpdater.promises.addEmailAddress)
+            done()
+          }
+        },
+        this.next
+      )
+    })
+
+    it('should pass the error to the next handler when adding the email fails', function(done) {
+      this.UserUpdater.promises.addEmailAddress.rejects(new Error())
+      this.UserEmailsController.add(this.req, this.res, error => {
+        expect(error).to.be.instanceof(Error)
+        done()
       })
+    })
+
+    it('should call the HTTP conflict handler when the email already exists', function(done) {
+      this.UserUpdater.promises.addEmailAddress.rejects(
+        new Errors.EmailExistsError()
+      )
+      this.HttpErrorHandler.conflict = sinon.spy((req, res, message) => {
+        req.should.exist
+        res.should.exist
+        message.should.equal('email_already_registered')
+        done()
+      })
+      this.UserEmailsController.add(this.req, this.res, this.next)
+    })
+
+    it("should call the HTTP conflict handler when there's a domain matching error", function(done) {
+      this.UserUpdater.promises.addEmailAddress.rejects(
+        new Error('422: Email does not belong to university')
+      )
+      this.HttpErrorHandler.conflict = sinon.spy((req, res, message) => {
+        req.should.exist
+        res.should.exist
+        message.should.equal('email_does_not_belong_to_university')
+        done()
+      })
+      this.UserEmailsController.add(this.req, this.res, this.next)
     })
   })
 
@@ -221,6 +322,42 @@ describe('UserEmailsController', function() {
           done()
         }
       })
+    })
+
+    it('should reset the users other sessions', function(done) {
+      this.UserUpdater.setDefaultEmailAddress.yields()
+
+      this.res.callback = () => {
+        expect(
+          this.UserSessionsManager.revokeAllUserSessions
+        ).to.have.been.calledWith(this.user, [this.req.sessionID])
+        done()
+      }
+
+      this.UserEmailsController.setDefault(this.req, this.res, done)
+    })
+
+    it('handles error from revoking sessions and returns 200', function(done) {
+      this.UserUpdater.setDefaultEmailAddress.yields()
+      const redisError = new Error('redis error')
+      this.UserSessionsManager.revokeAllUserSessions = sinon
+        .stub()
+        .yields(redisError)
+
+      this.res.callback = () => {
+        expect(this.res.statusCode).to.equal(200)
+
+        // give revoke process time to run
+        setTimeout(() => {
+          expect(this.logger.warn).to.have.been.calledWith(
+            sinon.match({ err: redisError }),
+            'failed revoking secondary sessions after changing default email'
+          )
+          done()
+        })
+      }
+
+      this.UserEmailsController.setDefault(this.req, this.res, done)
     })
   })
 

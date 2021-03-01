@@ -39,18 +39,30 @@ html(
 			script(type='text/javascript').
 				ga('create', '#{gaToken}', '#{settings.cookieDomain.replace(/^\./, "")}');
 				ga('send', 'pageview');
+
+				try {
+					ga.isBlocked = localStorage.getItem('gaBlocked') === 'true'
+					if (!ga.isBlocked) {
+						window.addEventListener('load', function () {
+							setTimeout(function () {
+								if (!ga.loaded) localStorage.setItem('gaBlocked', 'true')
+							}, 4000)
+						})
+					}
+				} catch (e) {}
 			if gaOptimize === true && typeof(gaOptimizeId) != "undefined"
-				script(type='text/javascript').
-					ga('require', '#{gaOptimizeId}')
-					ga('send', 'event', 'pageview',  document.title.substring(0, 499), window.location.href.substring(0, 499))
 				//- Anti-flicker snippet
 				style(type='text/css') .async-hide { opacity: 0 !important}
 				script(type='text/javascript').
-					(function(a,s,y,n,c,h,i,d,e){s.className+=' '+y;h.start=1*new Date;
-					h.end=i=function(){s.className=s.className.replace(RegExp(' ?'+y),'')};
-					(a[n]=a[n]||[]).hide=h;setTimeout(function(){i();h.end=null},c);h.timeout=c;
-					})(window,document.documentElement,'async-hide','dataLayer',4000,
-					{'#{gaOptimizeId}':true});
+					if (!ga.isBlocked) {
+						ga('require', '#{gaOptimizeId}');
+						ga('send', 'event', 'pageview',  document.title.substring(0, 499), window.location.href.substring(0, 499));
+						(function(a,s,y,n,c,h,i,d,e){s.className+=' '+y;h.start=1*new Date;
+						h.end=i=function(){s.className=s.className.replace(RegExp(' ?'+y),'')};
+						(a[n]=a[n]||[]).hide=h;setTimeout(function(){i();h.end=null},c);h.timeout=c;
+						})(window,document.documentElement,'async-hide','dataLayer',4000,
+						{'#{gaOptimizeId}':true});
+					}
 
 		- else
 			script(type='text/javascript').
@@ -64,6 +76,7 @@ html(
 
 		block head-scripts
 
+		meta(id="ol-usersEmail" content=getUserEmail())
 		script.
 			window.sharelatex = {
 				siteUrl: '#{settings.siteUrl}',
@@ -71,6 +84,11 @@ html(
 			};
 			window.ab = {};
 			window.user_id = '#{getLoggedInUserId()}';
+			//- Internationalisation settings
+			window.i18n = {
+				currentLangCode: '#{currentLngCode}'
+			}
+			//- Expose some settings globally to the frontend
 			window.ExposedSettings = JSON.parse('!{StringHelper.stringifyJsonForScript(ExposedSettings)}');
 
 		- if (typeof(settings.algolia) != "undefined")

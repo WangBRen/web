@@ -1,5 +1,5 @@
 /* eslint-disable
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
 */
 // TODO: This file was created by bulk-decaffeinate.
@@ -11,8 +11,8 @@
  * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
  */
 let UserMembershipViewModel
-const { ObjectId } = require('mongojs')
 const UserGetter = require('../User/UserGetter')
+const { isObjectIdInstance } = require('../Helpers/Mongo')
 
 module.exports = UserMembershipViewModel = {
   build(userOrEmail) {
@@ -27,13 +27,18 @@ module.exports = UserMembershipViewModel = {
     if (callback == null) {
       callback = function(error, viewModel) {}
     }
-    if (!(userOrIdOrEmail instanceof ObjectId)) {
+    if (!isObjectIdInstance(userOrIdOrEmail)) {
       // userOrIdOrEmail is a user or an email and can be parsed by #build
       return callback(null, UserMembershipViewModel.build(userOrIdOrEmail))
     }
 
     const userId = userOrIdOrEmail
-    const projection = { email: 1, first_name: 1, last_name: 1 }
+    const projection = {
+      email: 1,
+      first_name: 1,
+      last_name: 1,
+      lastLoggedIn: 1
+    }
     return UserGetter.getUser(userId, projection, function(error, user) {
       if (error != null || user == null) {
         return callback(null, buildUserViewModelWithId(userId.toString()))
@@ -52,6 +57,7 @@ var buildUserViewModel = function(user, isInvite) {
     email: user.email || null,
     first_name: user.first_name || null,
     last_name: user.last_name || null,
+    last_logged_in_at: user.lastLoggedIn || null,
     invite: isInvite
   }
 }

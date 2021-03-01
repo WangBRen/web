@@ -1,4 +1,4 @@
-aside.file-tree.full-size(
+aside.editor-sidebar.full-size(
 	ng-controller="HistoryV2FileTreeController"
 	ng-if="ui.view == 'history' && history.isV2"
 )
@@ -22,7 +22,7 @@ script(type="text/ng-template", id="historyFileEntityTpl")
 	.history-file-entity-wrapper
 		a.history-file-entity-link(
 			href
-			ng-click="$ctrl.handleClick()"
+			ng-click="$ctrl.isSelected ? '' : $ctrl.handleClick()"
 			ng-class="{ 'history-file-entity-link-selected': $ctrl.isSelected }"
 		)
 			span.history-file-entity-name-container

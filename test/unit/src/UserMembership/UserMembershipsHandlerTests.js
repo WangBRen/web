@@ -1,5 +1,5 @@
 /* eslint-disable
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
     no-return-assign,
 */
@@ -12,7 +12,7 @@
  */
 const sinon = require('sinon')
 const assertCalledWith = sinon.assert.calledWith
-const { ObjectId } = require('../../../../app/src/infrastructure/mongojs')
+const { ObjectId } = require('mongodb')
 const modulePath =
   '../../../../app/src/Features/UserMembership/UserMembershipsHandler'
 const SandboxedModule = require('sandboxed-module')

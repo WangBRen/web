@@ -6,14 +6,12 @@ import _ from 'lodash'
 */
 /* global recurly */
 import App from '../base'
-import '../directives/creditCards'
 
 export default App.controller('NewSubscriptionController', function(
   $scope,
   MultiCurrencyPricing,
   $http,
-  eventTracking,
-  ccUtils
+  eventTracking
 ) {
   if (typeof recurly === 'undefined' || !recurly) {
     $scope.recurlyLoadError = true
@@ -41,11 +39,7 @@ export default App.controller('NewSubscriptionController', function(
       'subscription-form-switch-to-student',
       window.plan_code
     )
-    window.location = `/user/subscription/new?planCode=${planCode}&currency=${
-      $scope.currencyCode
-    }&cc=${$scope.data.coupon}&itm_campaign=${window.ITMCampaign}&itm_content=${
-      window.ITMContent
-    }`
+    window.location = `/user/subscription/new?planCode=${planCode}&currency=${$scope.currencyCode}&cc=${$scope.data.coupon}&itm_campaign=${window.ITMCampaign}&itm_content=${window.ITMContent}`
   }
 
   eventTracking.sendMB('subscription-form', { plan: window.plan_code })
@@ -244,7 +238,7 @@ export default App.controller('NewSubscriptionController', function(
             address2: $scope.data.address2,
             country: $scope.data.country,
             state: $scope.data.state,
-            postal_code: $scope.data.postal_code
+            zip: $scope.data.postal_code
           },
           ITMCampaign: window.ITMCampaign,
           ITMContent: window.ITMContent

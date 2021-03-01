@@ -39,9 +39,7 @@ async function initializeProject() {
     }
     return { overleaf_id: overleafId }
   } catch (err) {
-    throw new OError({
-      message: 'failed to initialize project history'
-    }).withCause(err)
+    throw OError.tag(err, 'failed to initialize project history')
   }
 }
 
@@ -51,10 +49,9 @@ async function flushProject(projectId) {
       url: `${settings.apis.project_history.url}/project/${projectId}/flush`
     })
   } catch (err) {
-    throw new OError({
-      message: 'failed to flush project to project history',
-      info: { projectId }
-    }).withCause(err)
+    throw OError.tag(err, 'failed to flush project to project history', {
+      projectId
+    })
   }
 }
 
@@ -64,22 +61,33 @@ async function resyncProject(projectId) {
       url: `${settings.apis.project_history.url}/project/${projectId}/resync`
     })
   } catch (err) {
-    throw new OError({
-      message: 'failed to resync project history',
-      info: { projectId }
-    })
+    throw OError.tag(err, 'failed to resync project history', { projectId })
   }
 }
 
-async function deleteProject(projectId) {
+async function deleteProject(projectId, historyId) {
   try {
-    await request.delete(
-      `${settings.apis.project_history.url}/project/${projectId}`
-    )
+    const tasks = [
+      request.delete(
+        `${settings.apis.project_history.url}/project/${projectId}`
+      )
+    ]
+    if (historyId != null) {
+      tasks.push(
+        request.delete({
+          url: `${settings.apis.v1_history.url}/projects/${historyId}`,
+          auth: {
+            user: settings.apis.v1_history.user,
+            pass: settings.apis.v1_history.pass
+          }
+        })
+      )
+    }
+    await Promise.all(tasks)
   } catch (err) {
-    throw new OError({
-      message: 'failed to clear project history',
-      info: { projectId }
+    throw OError.tag(err, 'failed to clear project history', {
+      projectId,
+      historyId
     })
   }
 }
@@ -115,8 +123,8 @@ async function injectUserDetails(data) {
   const entries = Array.isArray(data.diff)
     ? data.diff
     : Array.isArray(data.updates)
-      ? data.updates
-      : []
+    ? data.updates
+    : []
   for (const entry of entries) {
     for (const user of (entry.meta && entry.meta.users) || []) {
       if (typeof user === 'string') {

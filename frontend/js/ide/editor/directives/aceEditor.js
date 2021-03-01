@@ -50,6 +50,7 @@ if (ace.config._moduleUrl == null) {
 }
 
 App.directive('aceEditor', function(
+  ide,
   $timeout,
   $compile,
   $rootScope,
@@ -115,6 +116,16 @@ App.directive('aceEditor', function(
 
       const editor = ace.edit(element.find('.ace-editor-body')[0])
       editor.$blockScrolling = Infinity
+
+      // Besides the main editor, other elements will re-use this directive
+      //  for displaying read-only content -- e.g. the history panes.
+      const editorAcceptsChanges = attrs.aceEditor === 'editor'
+      if (editorAcceptsChanges) {
+        // end-to-end check for edits -> acks, globally on any doc
+        // This may catch a missing attached ShareJsDoc that in turn bails out
+        //  on missing acks.
+        ide.globalEditorWatchdogManager.attachToEditor('Ace', editor)
+      }
 
       // auto-insertion of braces, brackets, dollars
       editor.setOption('behavioursEnabled', scope.autoPairDelimiters || false)
@@ -463,7 +474,6 @@ App.directive('aceEditor', function(
           'Menlo',
           'Ubuntu Mono',
           'Consolas',
-          'source-code-pro',
           'monospace'
         ]
 
@@ -477,7 +487,7 @@ App.directive('aceEditor', function(
             case 'lucida':
               return editor.setOption(
                 'fontFamily',
-                '"Lucida Console", monospace'
+                '"Lucida Console", "Source Code Pro", monospace'
               )
             default:
               return editor.setOption('fontFamily', null)
@@ -554,11 +564,25 @@ App.directive('aceEditor', function(
         return scope.$emit(`${scope.name}:change`)
       }
 
+      let currentFirstVisibleRow = null
+      const emitMiddleVisibleRowChanged = () => {
+        const firstVisibleRow = editor.getFirstVisibleRow()
+        if (firstVisibleRow === currentFirstVisibleRow) return
+
+        currentFirstVisibleRow = firstVisibleRow
+        const lastVisibleRow = editor.getLastVisibleRow()
+        scope.$emit(
+          `scroll:editor:update`,
+          Math.floor((firstVisibleRow + lastVisibleRow) / 2)
+        )
+      }
+
       const onScroll = function(scrollTop) {
         if (scope.eventsBridge == null) {
           return
         }
         const height = editor.renderer.layerConfig.maxHeight
+        emitMiddleVisibleRowChanged()
         return scope.eventsBridge.emit('aceScroll', scrollTop, height)
       }
 

@@ -1,5 +1,5 @@
 /* eslint-disable
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
     no-return-assign,
     no-unused-vars,
@@ -21,7 +21,7 @@ const SandboxedModule = require('sandboxed-module')
 const events = require('events')
 const MockRequest = require('../helpers/MockRequest')
 const MockResponse = require('../helpers/MockResponse')
-const { ObjectId } = require('mongojs')
+const { ObjectId } = require('mongodb')
 
 describe('CollaboratorsInviteController', function() {
   beforeEach(function() {
@@ -62,7 +62,6 @@ describe('CollaboratorsInviteController', function() {
         '../Editor/EditorRealTimeController': (this.EditorRealTimeController = {
           emitToRoom: sinon.stub()
         }),
-        '../Notifications/NotificationsBuilder': (this.NotificationsBuilder = {}),
         '../Analytics/AnalyticsManager': this.AnalyticsManger,
         '../Authentication/AuthenticationController': this
           .AuthenticationController,

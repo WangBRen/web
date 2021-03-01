@@ -1,5 +1,5 @@
 /* eslint-disable
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
     no-return-assign,
     no-unused-vars,
@@ -17,7 +17,6 @@ const sinon = require('sinon')
 const modulePath =
   '../../../../app/src/Features/Subscription/SubscriptionLocator'
 const { assert } = require('chai')
-const { ObjectId } = require('mongoose').Types
 
 describe('Subscription Locator Tests', function() {
   beforeEach(function() {
@@ -36,6 +35,7 @@ describe('Subscription Locator Tests', function() {
         console: console
       },
       requires: {
+        './GroupPlansData': {},
         '../../models/Subscription': {
           Subscription: this.Subscription
         },
@@ -87,22 +87,6 @@ describe('Subscription Locator Tests', function() {
           return done()
         }
       )
-    })
-
-    describe('finding managed subscription', function() {
-      it('should query the database', function(done) {
-        this.Subscription.findOne.callsArgWith(1, null, this.subscription)
-        return this.SubscriptionLocator.findManagedSubscription(
-          this.user._id,
-          (err, subscription) => {
-            this.Subscription.findOne
-              .calledWith({ manager_ids: this.user._id })
-              .should.equal(true)
-            subscription.should.equal(this.subscription)
-            return done()
-          }
-        )
-      })
     })
   })
 })

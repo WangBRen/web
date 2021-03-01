@@ -39,10 +39,10 @@ describe('HistoryController', function() {
         }),
         '../Authentication/AuthenticationController': this
           .AuthenticationController,
-        '../Errors/Errors': Errors,
         './HistoryManager': (this.HistoryManager = {}),
         '../Project/ProjectDetailsHandler': (this.ProjectDetailsHandler = {}),
         '../Project/ProjectEntityUpdateHandler': (this.ProjectEntityUpdateHandler = {}),
+        '../User/UserGetter': (this.UserGetter = {}),
         './RestoreManager': (this.RestoreManager = {})
       }
     })
@@ -59,7 +59,7 @@ describe('HistoryController', function() {
 
   describe('selectHistoryApi', function() {
     beforeEach(function() {
-      this.req = { url: '/mock/url', method: 'POST' }
+      this.req = { url: '/mock/url', method: 'POST', params: {} }
       this.res = 'mock-res'
       return (this.next = sinon.stub())
     })
@@ -185,7 +185,7 @@ describe('HistoryController', function() {
     describe('with an error', function() {
       beforeEach(function() {
         this.HistoryController.proxyToHistoryApi(this.req, this.res, this.next)
-        return this.proxy.events['error'].call(
+        return this.proxy.events.error.call(
           this.proxy,
           (this.error = new Error('oops'))
         )

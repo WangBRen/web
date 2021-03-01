@@ -1,5 +1,5 @@
 /* eslint-disable
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
     no-return-assign,
     no-unused-vars,
@@ -49,15 +49,13 @@ describe('ClsiFormatChecker', function() {
         },
         {
           path: 'stuff/image/image.png',
-          url: `http:somewhere.com/project/${
-            this.project_id
-          }/file/1234124321312`,
+          url: `http:somewhere.com/project/${this.project_id}/file/1234124321312`,
           modified: 'more stuff'
         }
       ])
     })
 
-    it('should call _checkForDuplicatePaths and _checkForConflictingPaths', function(done) {
+    it('should call _checkDocsAreUnderSizeLimit and _checkForConflictingPaths', function(done) {
       this.ClsiFormatChecker._checkForConflictingPaths = sinon
         .stub()
         .callsArgWith(1, null)
@@ -198,9 +196,7 @@ describe('ClsiFormatChecker', function() {
       it('should error when there is more than 5mb of data', function(done) {
         this.resources.push({
           path: 'massive.tex',
-          content: require('crypto')
-            .randomBytes(1000 * 1000 * 5)
-            .toString('hex')
+          content: 'hello world'.repeat(833333) // over 5mb limit
         })
 
         while (this.resources.length < 20) {
@@ -213,10 +209,10 @@ describe('ClsiFormatChecker', function() {
         return this.ClsiFormatChecker._checkDocsAreUnderSizeLimit(
           this.resources,
           (err, sizeError) => {
-            sizeError.totalSize.should.equal(10000016)
+            sizeError.totalSize.should.equal(16 + 833333 * 11) // 16 is for earlier resources
             sizeError.resources.length.should.equal(10)
             sizeError.resources[0].path.should.equal('massive.tex')
-            sizeError.resources[0].size.should.equal(1000 * 1000 * 10)
+            sizeError.resources[0].size.should.equal(833333 * 11)
             return done()
           }
         )
@@ -225,9 +221,7 @@ describe('ClsiFormatChecker', function() {
       it('should return nothing when project is correct size', function(done) {
         this.resources.push({
           path: 'massive.tex',
-          content: require('crypto')
-            .randomBytes(1000 * 1000 * 1)
-            .toString('hex')
+          content: 'x'.repeat(2 * 1000 * 1000)
         })
 
         while (this.resources.length < 20) {

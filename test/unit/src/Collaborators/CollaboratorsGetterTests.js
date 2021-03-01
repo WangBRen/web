@@ -2,7 +2,7 @@ const Path = require('path')
 const SandboxedModule = require('sandboxed-module')
 const sinon = require('sinon')
 const { expect } = require('chai')
-const { ObjectId } = require('mongojs')
+const { ObjectId } = require('mongodb')
 const { Project } = require('../helpers/models/Project')
 const Errors = require('../../../../app/src/Features/Errors/Errors')
 
@@ -51,10 +51,10 @@ describe('CollaboratorsGetter', function() {
         console: console
       },
       requires: {
+        mongodb: { ObjectId },
         '../User/UserGetter': this.UserGetter,
         '../../models/Project': { Project },
         '../Project/ProjectGetter': this.ProjectGetter,
-        '../Errors/Errors': Errors,
         '../Project/ProjectEditorHandler': this.ProjectEditorHandler
       }
     })

@@ -11,7 +11,7 @@
  * DS102: Remove unnecessary code created because of implicit returns
  * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
  */
-const { ObjectId } = require('mongojs')
+const { ObjectId } = require('mongodb')
 const Path = require('path')
 const SandboxedModule = require('sandboxed-module')
 const assert = require('assert')
@@ -38,6 +38,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
           console: console
         },
         requires: {
+          mongodb: { ObjectId },
           '../../models/Project': { Project: this.ProjectModel }
         }
       }
@@ -48,7 +49,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
   describe('initializeCollabratecProject', function() {
     describe('when update succeeds', function() {
       beforeEach(function() {
-        this.ProjectModel.update = sinon.stub().yields()
+        this.ProjectModel.updateOne = sinon.stub().yields()
         return this.ProjectCollabratecDetailsHandler.initializeCollabratecProject(
           this.projectId,
           this.userId,
@@ -70,7 +71,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
             ]
           }
         }
-        return expect(this.ProjectModel.update).to.have.been.calledWith(
+        return expect(this.ProjectModel.updateOne).to.have.been.calledWith(
           { _id: this.projectId },
           update,
           this.callback
@@ -80,7 +81,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
 
     describe('when update has error', function() {
       beforeEach(function() {
-        this.ProjectModel.update = sinon.stub().yields('error')
+        this.ProjectModel.updateOne = sinon.stub().yields('error')
         return this.ProjectCollabratecDetailsHandler.initializeCollabratecProject(
           this.projectId,
           this.userId,
@@ -97,7 +98,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
 
     describe('with invalid args', function() {
       beforeEach(function() {
-        this.ProjectModel.update = sinon.stub()
+        this.ProjectModel.updateOne = sinon.stub()
         return this.ProjectCollabratecDetailsHandler.initializeCollabratecProject(
           'bad-project-id',
           'bad-user-id',
@@ -108,7 +109,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
       })
 
       it('should not update', function() {
-        return expect(this.ProjectModel.update).not.to.have.been.called
+        return expect(this.ProjectModel.updateOne).not.to.have.been.called
       })
 
       it('should callback with error', function() {
@@ -205,7 +206,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
   describe('linkCollabratecUserProject', function() {
     describe('when update succeeds', function() {
       beforeEach(function() {
-        this.ProjectModel.update = sinon.stub().yields()
+        this.ProjectModel.updateOne = sinon.stub().yields()
         return this.ProjectCollabratecDetailsHandler.linkCollabratecUserProject(
           this.projectId,
           this.userId,
@@ -234,7 +235,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
             }
           }
         }
-        return expect(this.ProjectModel.update).to.have.been.calledWith(
+        return expect(this.ProjectModel.updateOne).to.have.been.calledWith(
           query,
           update,
           this.callback
@@ -244,7 +245,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
 
     describe('when update has error', function() {
       beforeEach(function() {
-        this.ProjectModel.update = sinon.stub().yields('error')
+        this.ProjectModel.updateOne = sinon.stub().yields('error')
         return this.ProjectCollabratecDetailsHandler.linkCollabratecUserProject(
           this.projectId,
           this.userId,
@@ -260,7 +261,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
 
     describe('with invalid args', function() {
       beforeEach(function() {
-        this.ProjectModel.update = sinon.stub()
+        this.ProjectModel.updateOne = sinon.stub()
         return this.ProjectCollabratecDetailsHandler.linkCollabratecUserProject(
           'bad-project-id',
           'bad-user-id',
@@ -270,7 +271,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
       })
 
       it('should not update', function() {
-        return expect(this.ProjectModel.update).not.to.have.been.called
+        return expect(this.ProjectModel.updateOne).not.to.have.been.called
       })
 
       it('should callback with error', function() {
@@ -297,7 +298,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
 
     describe('when update succeeds', function() {
       beforeEach(function() {
-        this.ProjectModel.update = sinon.stub().yields()
+        this.ProjectModel.updateOne = sinon.stub().yields()
         return this.ProjectCollabratecDetailsHandler.setCollabratecUsers(
           this.projectId,
           this.collabratecUsers,
@@ -311,7 +312,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
             collabratecUsers: this.collabratecUsers
           }
         }
-        return expect(this.ProjectModel.update).to.have.been.calledWith(
+        return expect(this.ProjectModel.updateOne).to.have.been.calledWith(
           { _id: this.projectId },
           update,
           this.callback
@@ -321,7 +322,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
 
     describe('when update has error', function() {
       beforeEach(function() {
-        this.ProjectModel.update = sinon.stub().yields('error')
+        this.ProjectModel.updateOne = sinon.stub().yields('error')
         return this.ProjectCollabratecDetailsHandler.setCollabratecUsers(
           this.projectId,
           this.collabratecUsers,
@@ -336,7 +337,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
 
     describe('with invalid project_id', function() {
       beforeEach(function() {
-        this.ProjectModel.update = sinon.stub()
+        this.ProjectModel.updateOne = sinon.stub()
         return this.ProjectCollabratecDetailsHandler.setCollabratecUsers(
           'bad-project-id',
           this.collabratecUsers,
@@ -345,7 +346,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
       })
 
       it('should not update', function() {
-        return expect(this.ProjectModel.update).not.to.have.been.called
+        return expect(this.ProjectModel.updateOne).not.to.have.been.called
       })
 
       it('should callback with error', function() {
@@ -356,7 +357,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
     describe('with invalid user_id', function() {
       beforeEach(function() {
         this.collabratecUsers[1].user_id = 'bad-user-id'
-        this.ProjectModel.update = sinon.stub()
+        this.ProjectModel.updateOne = sinon.stub()
         return this.ProjectCollabratecDetailsHandler.setCollabratecUsers(
           this.projectId,
           this.collabratecUsers,
@@ -365,7 +366,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
       })
 
       it('should not update', function() {
-        return expect(this.ProjectModel.update).not.to.have.been.called
+        return expect(this.ProjectModel.updateOne).not.to.have.been.called
       })
 
       it('should callback with error', function() {
@@ -377,7 +378,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
   describe('unlinkCollabratecUserProject', function() {
     describe('when update succeeds', function() {
       beforeEach(function() {
-        this.ProjectModel.update = sinon.stub().yields()
+        this.ProjectModel.updateOne = sinon.stub().yields()
         return this.ProjectCollabratecDetailsHandler.unlinkCollabratecUserProject(
           this.projectId,
           this.userId,
@@ -394,7 +395,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
             }
           }
         }
-        return expect(this.ProjectModel.update).to.have.been.calledWith(
+        return expect(this.ProjectModel.updateOne).to.have.been.calledWith(
           query,
           update,
           this.callback
@@ -404,7 +405,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
 
     describe('when update has error', function() {
       beforeEach(function() {
-        this.ProjectModel.update = sinon.stub().yields('error')
+        this.ProjectModel.updateOne = sinon.stub().yields('error')
         return this.ProjectCollabratecDetailsHandler.unlinkCollabratecUserProject(
           this.projectId,
           this.userId,
@@ -419,7 +420,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
 
     describe('with invalid args', function() {
       beforeEach(function() {
-        this.ProjectModel.update = sinon.stub()
+        this.ProjectModel.updateOne = sinon.stub()
         return this.ProjectCollabratecDetailsHandler.unlinkCollabratecUserProject(
           'bad-project-id',
           'bad-user-id',
@@ -428,7 +429,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
       })
 
       it('should not update', function() {
-        return expect(this.ProjectModel.update).not.to.have.been.called
+        return expect(this.ProjectModel.updateOne).not.to.have.been.called
       })
 
       it('should callback with error', function() {
@@ -440,7 +441,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
   describe('updateCollabratecUserIds', function() {
     describe('when update succeeds', function() {
       beforeEach(function() {
-        this.ProjectModel.update = sinon.stub().yields()
+        this.ProjectModel.updateMany = sinon.stub().yields()
         return this.ProjectCollabratecDetailsHandler.updateCollabratecUserIds(
           this.userId,
           this.userId2,
@@ -449,10 +450,9 @@ describe('ProjectCollabratecDetailsHandler', function() {
       })
 
       it('should update project model', function() {
-        return expect(this.ProjectModel.update).to.have.been.calledWith(
+        return expect(this.ProjectModel.updateMany).to.have.been.calledWith(
           { 'collabratecUsers.user_id': this.userId },
           { $set: { 'collabratecUsers.$.user_id': this.userId2 } },
-          { multi: true },
           this.callback
         )
       })
@@ -460,7 +460,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
 
     describe('when update has error', function() {
       beforeEach(function() {
-        this.ProjectModel.update = sinon.stub().yields('error')
+        this.ProjectModel.updateMany = sinon.stub().yields('error')
         return this.ProjectCollabratecDetailsHandler.updateCollabratecUserIds(
           this.userId,
           this.userId2,
@@ -475,7 +475,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
 
     describe('with invalid old_user_id', function() {
       beforeEach(function() {
-        this.ProjectModel.update = sinon.stub()
+        this.ProjectModel.updateOne = sinon.stub()
         return this.ProjectCollabratecDetailsHandler.updateCollabratecUserIds(
           'bad-user-id',
           this.userId2,
@@ -484,7 +484,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
       })
 
       it('should not update', function() {
-        return expect(this.ProjectModel.update).not.to.have.been.called
+        return expect(this.ProjectModel.updateOne).not.to.have.been.called
       })
 
       it('should callback with error', function() {
@@ -494,7 +494,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
 
     describe('with invalid new_user_id', function() {
       beforeEach(function() {
-        this.ProjectModel.update = sinon.stub()
+        this.ProjectModel.updateOne = sinon.stub()
         return this.ProjectCollabratecDetailsHandler.updateCollabratecUserIds(
           this.userId,
           'bad-user-id',
@@ -503,7 +503,7 @@ describe('ProjectCollabratecDetailsHandler', function() {
       })
 
       it('should not update', function() {
-        return expect(this.ProjectModel.update).not.to.have.been.called
+        return expect(this.ProjectModel.updateOne).not.to.have.been.called
       })
 
       it('should callback with error', function() {

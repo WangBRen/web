@@ -1,6 +1,6 @@
 /* eslint-disable
     camelcase,
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
     no-unused-vars,
 */
@@ -13,6 +13,7 @@
  * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
  */
 const request = require('request').defaults({ jar: false })
+const OError = require('@overleaf/o-error')
 const logger = require('logger-sharelatex')
 const settings = require('settings-sharelatex')
 const Errors = require('../Errors/Errors')
@@ -25,9 +26,7 @@ const DocstoreManager = {
     if (callback == null) {
       callback = function(error) {}
     }
-    const url = `${
-      settings.apis.docstore.url
-    }/project/${project_id}/doc/${doc_id}`
+    const url = `${settings.apis.docstore.url}/project/${project_id}/doc/${doc_id}`
     return request.del({ url: url, timeout: TIMEOUT }, function(
       error,
       res,
@@ -39,19 +38,21 @@ const DocstoreManager = {
       if (res.statusCode >= 200 && res.statusCode < 300) {
         return callback(null)
       } else if (res.statusCode === 404) {
-        error = new Errors.NotFoundError('tried to delete doc not in docstore')
-        logger.warn(
-          { err: error, project_id, doc_id },
-          'tried to delete doc not in docstore'
-        )
+        error = new Errors.NotFoundError({
+          message: 'tried to delete doc not in docstore',
+          info: {
+            project_id,
+            doc_id
+          }
+        })
         return callback(error) // maybe suppress the error when delete doc which is not present?
       } else {
-        error = new Error(
-          `docstore api responded with non-success code: ${res.statusCode}`
-        )
-        logger.warn(
-          { err: error, project_id, doc_id },
-          'error deleting doc in docstore'
+        error = new OError(
+          `docstore api responded with non-success code: ${res.statusCode}`,
+          {
+            project_id,
+            doc_id
+          }
         )
         return callback(error)
       }
@@ -76,12 +77,9 @@ const DocstoreManager = {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           return callback(null, docs)
         } else {
-          error = new Error(
-            `docstore api responded with non-success code: ${res.statusCode}`
-          )
-          logger.warn(
-            { err: error, project_id },
-            'error getting all docs from docstore'
+          error = new OError(
+            `docstore api responded with non-success code: ${res.statusCode}`,
+            { project_id }
           )
           return callback(error)
         }
@@ -107,12 +105,9 @@ const DocstoreManager = {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           return callback(null, docs)
         } else {
-          error = new Error(
-            `docstore api responded with non-success code: ${res.statusCode}`
-          )
-          logger.warn(
-            { err: error, project_id },
-            'error getting all doc ranges from docstore'
+          error = new OError(
+            `docstore api responded with non-success code: ${res.statusCode}`,
+            { project_id }
           )
           return callback(error)
         }
@@ -131,9 +126,7 @@ const DocstoreManager = {
       callback = options
       options = {}
     }
-    let url = `${
-      settings.apis.docstore.url
-    }/project/${project_id}/doc/${doc_id}`
+    let url = `${settings.apis.docstore.url}/project/${project_id}/doc/${doc_id}`
     if (options.include_deleted) {
       url += '?include_deleted=true'
     }
@@ -154,19 +147,21 @@ const DocstoreManager = {
           )
           return callback(null, doc.lines, doc.rev, doc.version, doc.ranges)
         } else if (res.statusCode === 404) {
-          error = new Errors.NotFoundError('doc not found in docstore')
-          logger.warn(
-            { err: error, project_id, doc_id },
-            'doc not found in docstore'
-          )
+          error = new Errors.NotFoundError({
+            message: 'doc not found in docstore',
+            info: {
+              project_id,
+              doc_id
+            }
+          })
           return callback(error)
         } else {
-          error = new Error(
-            `docstore api responded with non-success code: ${res.statusCode}`
-          )
-          logger.warn(
-            { err: error, project_id, doc_id },
-            'error getting doc from docstore'
+          error = new OError(
+            `docstore api responded with non-success code: ${res.statusCode}`,
+            {
+              project_id,
+              doc_id
+            }
           )
           return callback(error)
         }
@@ -174,13 +169,40 @@ const DocstoreManager = {
     )
   },
 
+  isDocDeleted(project_id, doc_id, callback) {
+    const url = `${settings.apis.docstore.url}/project/${project_id}/doc/${doc_id}/deleted`
+    request.get({ url, timeout: TIMEOUT, json: true }, function(
+      err,
+      res,
+      body
+    ) {
+      if (err) {
+        callback(err)
+      } else if (res.statusCode === 200) {
+        callback(null, body.deleted)
+      } else if (res.statusCode === 404) {
+        callback(
+          new Errors.NotFoundError({
+            message: 'doc does not exist in project',
+            info: { project_id, doc_id }
+          })
+        )
+      } else {
+        callback(
+          new OError(
+            `docstore api responded with non-success code: ${res.statusCode}`,
+            { project_id, doc_id }
+          )
+        )
+      }
+    })
+  },
+
   updateDoc(project_id, doc_id, lines, version, ranges, callback) {
     if (callback == null) {
       callback = function(error, modified, rev) {}
     }
-    const url = `${
-      settings.apis.docstore.url
-    }/project/${project_id}/doc/${doc_id}`
+    const url = `${settings.apis.docstore.url}/project/${project_id}/doc/${doc_id}`
     return request.post(
       {
         url,
@@ -202,12 +224,9 @@ const DocstoreManager = {
           )
           return callback(null, result.modified, result.rev)
         } else {
-          error = new Error(
-            `docstore api responded with non-success code: ${res.statusCode}`
-          )
-          logger.warn(
-            { err: error, project_id, doc_id },
-            'error updating doc in docstore'
+          error = new OError(
+            `docstore api responded with non-success code: ${res.statusCode}`,
+            { project_id, doc_id }
           )
           return callback(error)
         }
@@ -233,10 +252,9 @@ const DocstoreManager = {
     // use default timeout for archiving/unarchiving/destroying
     request.post(url, function(err, res, docs) {
       if (err != null) {
-        logger.warn(
-          { err, project_id },
-          `error calling ${method} project in docstore`
-        )
+        OError.tag(err, `error calling ${method} project in docstore`, {
+          project_id
+        })
         return callback(err)
       }
 

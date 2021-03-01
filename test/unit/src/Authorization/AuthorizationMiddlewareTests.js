@@ -1,7 +1,6 @@
 const sinon = require('sinon')
 const { expect } = require('chai')
 const SandboxedModule = require('sandboxed-module')
-const HttpErrors = require('@overleaf/o-error/http')
 const Errors = require('../../../../app/src/Features/Errors/Errors.js')
 
 const MODULE_PATH =
@@ -17,6 +16,9 @@ describe('AuthorizationMiddleware', function() {
       isUserLoggedIn: sinon.stub().returns(true)
     }
     this.AuthorizationManager = {}
+    this.HttpErrorHandler = {
+      forbidden: sinon.stub()
+    }
     this.TokenAccessHandler = {
       getRequestToken: sinon.stub().returns(this.token)
     }
@@ -34,11 +36,10 @@ describe('AuthorizationMiddleware', function() {
       requires: {
         './AuthorizationManager': this.AuthorizationManager,
         'logger-sharelatex': { log() {} },
-        mongojs: {
+        mongodb: {
           ObjectId: this.ObjectId
         },
-        '@overleaf/o-error/http': HttpErrors,
-        '../Errors/Errors': Errors,
+        '../Errors/HttpErrorHandler': this.HttpErrorHandler,
         '../Authentication/AuthenticationController': this
           .AuthenticationController,
         '../TokenAccess/TokenAccessHandler': this.TokenAccessHandler
@@ -157,8 +158,8 @@ describe('AuthorizationMiddleware', function() {
                 this.next
               )
               this.next.called.should.equal(false)
-              this.AuthorizationMiddleware.redirectToRestricted
-                .calledWith(this.req, this.res, this.next)
+              this.HttpErrorHandler.forbidden
+                .calledWith(this.req, this.res)
                 .should.equal(true)
             })
           })
@@ -198,8 +199,8 @@ describe('AuthorizationMiddleware', function() {
                 this.next
               )
               this.next.called.should.equal(false)
-              this.AuthorizationMiddleware.redirectToRestricted
-                .calledWith(this.req, this.res, this.next)
+              this.HttpErrorHandler.forbidden
+                .calledWith(this.req, this.res)
                 .should.equal(true)
             })
           })
@@ -277,14 +278,11 @@ describe('AuthorizationMiddleware', function() {
             .yields(null, false)
         })
 
-        it('should raise a 403', function(done) {
+        it('should invoke HTTP forbidden error handler', function(done) {
+          this.HttpErrorHandler.forbidden = sinon.spy(() => done())
           this.AuthorizationMiddleware.ensureUserCanAdminProject(
             this.req,
-            this.res,
-            err => {
-              expect(err).to.be.an.instanceof(HttpErrors.ForbiddenError)
-              done()
-            }
+            this.res
           )
         })
       })
@@ -317,14 +315,11 @@ describe('AuthorizationMiddleware', function() {
             .yields(null, false)
         })
 
-        it('should raise a 403', function(done) {
+        it('should invoke HTTP forbidden error handler', function(done) {
+          this.HttpErrorHandler.forbidden = sinon.spy(() => done())
           this.AuthorizationMiddleware.ensureUserCanAdminProject(
             this.req,
-            this.res,
-            err => {
-              expect(err).to.be.an.instanceof(HttpErrors.ForbiddenError)
-              done()
-            }
+            this.res
           )
         })
       })

@@ -59,7 +59,7 @@ module.exports = {
         // Only compile application files (npm and vendored dependencies are in
         // ES5 already)
         exclude: [
-          /node_modules/,
+          /node_modules\/(?!react-dnd\/)/,
           path.resolve(__dirname, 'frontend/js/vendor')
         ],
         use: [
@@ -140,6 +140,16 @@ module.exports = {
           runtimePath: 'handlebars/runtime'
         }
       },
+      {
+        // Load translations files with custom loader, to extract and apply
+        // fallbacks
+        test: /locales\/(\w{2}(-\w{2})?)\.json$/,
+        use: [
+          {
+            loader: path.resolve('frontend/translations-loader.js')
+          }
+        ]
+      },
       // Allow for injection of modules dependencies by reading contents of
       // modules directory and adding necessary dependencies
       {
@@ -191,10 +201,7 @@ module.exports = {
       // Shortcut to vendored dependencies in frontend/js/vendor/libs
       libs: path.join(__dirname, 'frontend/js/vendor/libs'),
       // Enables ace/ace shortcut
-      ace: path.join(
-        __dirname,
-        `frontend/js/vendor/${PackageVersions.lib('ace')}`
-      ),
+      ace: 'ace-builds/src-noconflict',
       // fineupload vendored dependency (which we're aliasing to fineuploadER
       // for some reason)
       fineuploader: path.join(
@@ -232,6 +239,11 @@ module.exports = {
       writeToFileEmit: true
     }),
 
+    // Silence react messages in the dev-tools console
+    new webpack.DefinePlugin({
+      __REACT_DEVTOOLS_GLOBAL_HOOK__: '({ isDisabled: true })'
+    }),
+
     // Prevent moment from loading (very large) locale files that aren't used
     new webpack.IgnorePlugin({
       resourceRegExp: /^\.\/locale$/,
@@ -248,7 +260,7 @@ module.exports = {
         to: 'js/libs/sigma-master'
       },
       {
-        from: `frontend/js/vendor/ace-${PackageVersions.version.ace}/`,
+        from: 'node_modules/ace-builds/src-min-noconflict',
         to: `js/ace-${PackageVersions.version.ace}/`
       },
       // Copy CMap files from pdfjs-dist package to build output. These are used

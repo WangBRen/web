@@ -446,9 +446,7 @@ App.controller('ProjectPageController', function(
           name,
           _id: data.project_id,
           accessLevel: 'owner',
-          owner: {
-            _id: window.user_id
-          }
+          owner: data.owner
           // TODO: Check access level if correct after adding it in
           // to the rest of the app
         })
@@ -532,8 +530,7 @@ App.controller('ProjectPageController', function(
       })
   }
 
-  $scope.openCloneProjectModal = function() {
-    let project = $scope.getFirstSelectedProject()
+  $scope.openCloneProjectModal = function(project) {
     if (!project) {
       return
     }
@@ -879,24 +876,7 @@ App.controller('ProjectListItemController', function(
 
   $scope.clone = function(e) {
     e.stopPropagation()
-    $scope.project.isTableActionInflight = true
-    return $scope
-      .cloneProject($scope.project, `${$scope.project.name} (Copy)`)
-      .then(() => ($scope.project.isTableActionInflight = false))
-      .catch(function(response) {
-        const { data, status } = response
-        const error = status === 400 ? { message: data } : true
-        $modal.open({
-          templateUrl: 'showErrorModalTemplate',
-          controller: 'ShowErrorModalController',
-          resolve: {
-            error() {
-              return error
-            }
-          }
-        })
-        $scope.project.isTableActionInflight = false
-      })
+    $scope.openCloneProjectModal($scope.project)
   }
 
   $scope.download = function(e) {

@@ -45,8 +45,16 @@ describe('UserMembershipController', function() {
       }
     }
     this.users = [
-      { _id: 'mock-member-id-1', email: 'mock-email-1@foo.com' },
-      { _id: 'mock-member-id-2', email: 'mock-email-2@foo.com' }
+      {
+        _id: 'mock-member-id-1',
+        email: 'mock-email-1@foo.com',
+        last_logged_in_at: '2020-08-09T12:43:11.467Z'
+      },
+      {
+        _id: 'mock-member-id-2',
+        email: 'mock-email-2@foo.com',
+        last_logged_in_at: '2020-05-20T10:41:11.407Z'
+      }
     ]
 
     this.AuthenticationController = {
@@ -70,7 +78,6 @@ describe('UserMembershipController', function() {
           '../Authentication/AuthenticationController': this
             .AuthenticationController,
           './UserMembershipHandler': this.UserMembershipHandler,
-          '../Errors/Errors': Errors,
           'logger-sharelatex': {
             log() {},
             err() {}
@@ -311,7 +318,7 @@ describe('UserMembershipController', function() {
     it('should export the correct csv', function() {
       return assertCalledWith(
         this.res.send,
-        'mock-email-1@foo.com\nmock-email-2@foo.com\n'
+        '"email","last_logged_in_at"\n"mock-email-1@foo.com","2020-08-09T12:43:11.467Z"\n"mock-email-2@foo.com","2020-05-20T10:41:11.407Z"'
       )
     })
   })
@@ -336,14 +343,14 @@ describe('UserMembershipController', function() {
   describe('create', function() {
     beforeEach(function() {
       this.req.params.name = 'institution'
-      this.req.entityConfig = EntityConfigs['institution']
+      this.req.entityConfig = EntityConfigs.institution
       return (this.req.params.id = 123)
     })
 
     it('creates institution', function(done) {
       return this.UserMembershipController.create(this.req, {
         redirect: path => {
-          expect(path).to.eq(EntityConfigs['institution'].pathsFor(123).index)
+          expect(path).to.eq(EntityConfigs.institution.pathsFor(123).index)
           sinon.assert.calledWithMatch(
             this.UserMembershipHandler.createEntity,
             123,

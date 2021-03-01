@@ -13,6 +13,7 @@
  * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
  */
 import App from '../../base'
+import _ from 'lodash'
 import 'libs/jquery-layout'
 import 'libs/jquery.ui.touch-punch'
 
@@ -34,13 +35,13 @@ export default App.directive('layout', ($parse, $compile, ide) => ({
         if (attrs.spacingOpen != null) {
           spacingOpen = parseInt(attrs.spacingOpen, 10)
         } else {
-          spacingOpen = window.uiConfig.defaultResizerSizeOpen
+          spacingOpen = 7
         }
 
         if (attrs.spacingClosed != null) {
           spacingClosed = parseInt(attrs.spacingClosed, 10)
         } else {
-          spacingClosed = window.uiConfig.defaultResizerSizeClosed
+          spacingClosed = 7
         }
 
         const options = {
@@ -92,13 +93,8 @@ export default App.directive('layout', ($parse, $compile, ide) => ({
           }
         }
 
-        if (window.uiConfig.eastResizerCursor != null) {
-          options.east.resizerCursor = window.uiConfig.eastResizerCursor
-        }
-
-        if (window.uiConfig.westResizerCursor != null) {
-          options.west.resizerCursor = window.uiConfig.westResizerCursor
-        }
+        options.east.resizerCursor = 'ew-resize'
+        options.west.resizerCursor = 'ew-resize'
 
         const repositionControls = function() {
           state = element.layout().readState()
@@ -233,9 +229,16 @@ ng-click=\"handleClick()\">\
         }
 
         // Save state when exiting
-        $(window).unload(() =>
-          ide.localStorage(`layout.${name}`, element.layout().readState())
-        )
+        $(window).unload(() => {
+          // Save only the state properties for the current layout, ignoring sublayouts inside it.
+          // If we save sublayouts state (`children`), the layout library will use it when
+          // initializing. This raises errors when the sublayout elements aren't available (due to
+          // being loaded at init or just not existing for the current project/user).
+          const stateToSave = _.mapValues(element.layout().readState(), pane =>
+            _.omit(pane, 'children')
+          )
+          ide.localStorage(`layout.${name}`, stateToSave)
+        })
 
         if (attrs.openEast != null) {
           scope.$watch(attrs.openEast, function(value, oldValue) {

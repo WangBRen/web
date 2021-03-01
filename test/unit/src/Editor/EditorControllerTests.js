@@ -1,5 +1,5 @@
 /* eslint-disable
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
     no-return-assign,
     no-unused-vars,
@@ -22,11 +22,13 @@ const modulePath = require('path').join(
 )
 const MockClient = require('../helpers/MockClient')
 const assert = require('assert')
+const { ObjectId } = require('mongodb')
 
 describe('EditorController', function() {
   beforeEach(function() {
     this.project_id = 'test-project-id'
     this.source = 'dropbox'
+    this.user_id = new ObjectId()
 
     this.doc = { _id: (this.doc_id = 'test-doc-id') }
     this.docName = 'doc.tex'
@@ -68,7 +70,7 @@ describe('EditorController', function() {
         './EditorRealTimeController': (this.EditorRealTimeController = {
           emitToRoom: sinon.stub()
         }),
-        'metrics-sharelatex': (this.Metrics = { inc: sinon.stub() }),
+        '@overleaf/metrics': (this.Metrics = { inc: sinon.stub() }),
         'logger-sharelatex': (this.logger = {
           log: sinon.stub(),
           err: sinon.stub()
@@ -112,7 +114,8 @@ describe('EditorController', function() {
           'reciveNewDoc',
           this.folder_id,
           this.doc,
-          this.source
+          this.source,
+          this.user_id
         )
         .should.equal(true)
     })
@@ -160,7 +163,8 @@ describe('EditorController', function() {
           this.folder_id,
           this.file,
           this.source,
-          this.linkedFileData
+          this.linkedFileData,
+          this.user_id
         )
         .should.equal(true)
     })
@@ -225,7 +229,8 @@ describe('EditorController', function() {
             'reciveNewDoc',
             this.folder_id,
             this.doc,
-            this.source
+            this.source,
+            this.user_id
           )
           .should.equal(true)
       })
@@ -291,7 +296,8 @@ describe('EditorController', function() {
             this.folder_id,
             this.file,
             this.source,
-            this.linkedFileData
+            this.linkedFileData,
+            this.user_id
           )
           .should.equal(true)
       })
@@ -343,7 +349,8 @@ describe('EditorController', function() {
             'reciveNewDoc',
             this.folder_id,
             this.doc,
-            this.source
+            this.source,
+            this.user_id
           )
           .should.equal(true)
       })
@@ -442,7 +449,8 @@ describe('EditorController', function() {
             this.folder_id,
             this.file,
             this.source,
-            this.linkedFileData
+            this.linkedFileData,
+            this.user_id
           )
           .should.equal(true)
       })
@@ -502,6 +510,7 @@ describe('EditorController', function() {
         this.folder_id,
         this.folderName,
         this.source,
+        this.user_id,
         this.callback
       )
     })
@@ -513,11 +522,9 @@ describe('EditorController', function() {
     })
 
     it('should notifyProjectUsersOfNewFolder', function() {
-      return this.EditorController._notifyProjectUsersOfNewFolder.calledWith(
-        this.project_id,
-        this.folder_id,
-        this.folder
-      )
+      return this.EditorController._notifyProjectUsersOfNewFolder
+        .calledWith(this.project_id, this.folder_id, this.folder, this.user_id)
+        .should.equal(true)
     })
 
     it('should return the folder in the callback', function() {

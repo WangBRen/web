@@ -1,4 +1,4 @@
-const { ObjectId } = require('../../../../app/src/infrastructure/mongojs')
+const { ObjectId } = require('mongodb')
 const SandboxedModule = require('sandboxed-module')
 const chai = require('chai')
 const path = require('path')
@@ -64,12 +64,13 @@ describe('TpdsUpdateSender', function() {
         console: console
       },
       requires: {
+        mongodb: { ObjectId },
         'settings-sharelatex': this.settings,
         'logger-sharelatex': { log() {} },
         'request-promise-native': this.request,
         '../Collaborators/CollaboratorsGetter': this.CollaboratorsGetter,
         '../User/UserGetter.js': this.UserGetter,
-        'metrics-sharelatex': {
+        '@overleaf/metrics': {
           inc() {}
         }
       }
@@ -130,16 +131,19 @@ describe('TpdsUpdateSender', function() {
       )}${encodeURIComponent(path)}`
       job0.uri.should.equal(expectedUrl)
       job0.headers.sl_all_user_ids.should.equal(JSON.stringify([userId]))
+      job0.headers.sl_project_owner_user_id.should.equal(userId)
 
       const { group: group1, job: job1 } = this.request.secondCall.args[0].json
       group1.should.equal(collaberatorRef)
       job1.headers.sl_all_user_ids.should.equal(
         JSON.stringify([collaberatorRef])
       )
+      job1.headers.sl_project_owner_user_id.should.equal(userId)
 
       const { group: group2, job: job2 } = this.request.thirdCall.args[0].json
       group2.should.equal(readOnlyRef)
       job2.headers.sl_all_user_ids.should.equal(JSON.stringify([readOnlyRef]))
+      job2.headers.sl_project_owner_user_id.should.equal(userId)
 
       this.UserGetter.promises.getUsers.should.have.been.calledOnce.and.calledWith(
         {

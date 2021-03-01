@@ -27,6 +27,7 @@ describe('NewsletterManager', function() {
 
     this.NewsletterManager = SandboxedModule.require(MODULE_PATH, {
       requires: {
+        'logger-sharelatex': { info: sinon.stub() },
         'mailchimp-api-v3': this.Mailchimp,
         'settings-sharelatex': this.Settings
       },
@@ -153,6 +154,28 @@ describe('NewsletterManager', function() {
       expect(this.mailchimp.delete).to.have.been.calledWith(
         `/lists/list_id/members/${this.emailHash}`
       )
+    })
+
+    it('does not reject on non-fatal error ', async function() {
+      const nonFatalError = new Error('merge fields were invalid')
+      this.mailchimp.patch.rejects(nonFatalError)
+      await expect(
+        this.NewsletterManager.changeEmail(
+          this.user,
+          'overleaf.squirrel@example.com'
+        )
+      ).to.be.fulfilled
+    })
+
+    it('rejects on any other error', async function() {
+      const fatalError = new Error('fatal error')
+      this.mailchimp.patch.rejects(fatalError)
+      await expect(
+        this.NewsletterManager.changeEmail(
+          this.user,
+          'overleaf.squirrel@example.com'
+        )
+      ).to.be.rejected
     })
   })
 })

@@ -1,8 +1,7 @@
 /* eslint-disable
     camelcase,
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
-    standard/no-callback-literal,
 */
 // TODO: This file was created by bulk-decaffeinate.
 // Fix any style issues and re-enable lint.
@@ -13,6 +12,7 @@
  * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
  */
 let LimitationsManager
+const OError = require('@overleaf/o-error')
 const logger = require('logger-sharelatex')
 const ProjectGetter = require('../Project/ProjectGetter')
 const UserGetter = require('../User/UserGetter')
@@ -224,7 +224,9 @@ module.exports = LimitationsManager = {
       subscription
     ) {
       if (err != null) {
-        logger.warn({ err, subscriptionId }, 'error getting subscription')
+        OError.tag(err, 'error getting subscription', {
+          subscriptionId
+        })
         return callback(err)
       }
       if (subscription == null) {

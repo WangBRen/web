@@ -1,4 +1,5 @@
 const async = require('async')
+const OError = require('@overleaf/o-error')
 const PlansLocator = require('./PlansLocator')
 const _ = require('underscore')
 const SubscriptionLocator = require('./SubscriptionLocator')
@@ -12,12 +13,32 @@ const UserGetter = require('../User/UserGetter')
 
 const FeaturesUpdater = {
   refreshFeatures(userId, callback = () => {}) {
-    FeaturesUpdater._computeFeatures(userId, (error, features) => {
-      if (error) {
-        return callback(error)
+    UserGetter.getUser(userId, { _id: 1, features: 1 }, (err, user) => {
+      if (err) {
+        return callback(err)
       }
-      logger.log({ userId, features }, 'updating user features')
-      UserFeaturesUpdater.updateFeatures(userId, features, callback)
+      const oldFeatures = _.clone(user.features)
+      FeaturesUpdater._computeFeatures(userId, (error, features) => {
+        if (error) {
+          return callback(error)
+        }
+        logger.log({ userId, features }, 'updating user features')
+        UserFeaturesUpdater.updateFeatures(userId, features, err => {
+          if (err) {
+            return callback(err)
+          }
+          if (oldFeatures.dropbox === true && features.dropbox === false) {
+            logger.log({ userId }, '[FeaturesUpdater] must unlink dropbox')
+            const Modules = require('../../infrastructure/Modules')
+            Modules.hooks.fire('removeDropbox', userId, err => {
+              if (err) {
+                logger.error(err)
+              }
+            })
+          }
+          return callback()
+        })
+      })
     })
   },
 
@@ -47,9 +68,12 @@ const FeaturesUpdater = {
     }
     async.series(jobs, function(err, results) {
       if (err) {
-        logger.warn(
-          { err, userId },
-          'error getting subscription or group for refreshFeatures'
+        OError.tag(
+          err,
+          'error getting subscription or group for refreshFeatures',
+          {
+            userId
+          }
         )
         return callback(err)
       }
@@ -188,29 +212,26 @@ const FeaturesUpdater = {
       // Special merging logic for non-boolean features
       if (key === 'compileGroup') {
         if (
-          features['compileGroup'] === 'priority' ||
-          featuresB['compileGroup'] === 'priority'
+          features.compileGroup === 'priority' ||
+          featuresB.compileGroup === 'priority'
         ) {
-          features['compileGroup'] = 'priority'
+          features.compileGroup = 'priority'
         } else {
-          features['compileGroup'] = 'standard'
+          features.compileGroup = 'standard'
         }
       } else if (key === 'collaborators') {
-        if (
-          features['collaborators'] === -1 ||
-          featuresB['collaborators'] === -1
-        ) {
-          features['collaborators'] = -1
+        if (features.collaborators === -1 || featuresB.collaborators === -1) {
+          features.collaborators = -1
         } else {
-          features['collaborators'] = Math.max(
-            features['collaborators'] || 0,
-            featuresB['collaborators'] || 0
+          features.collaborators = Math.max(
+            features.collaborators || 0,
+            featuresB.collaborators || 0
           )
         }
       } else if (key === 'compileTimeout') {
-        features['compileTimeout'] = Math.max(
-          features['compileTimeout'] || 0,
-          featuresB['compileTimeout'] || 0
+        features.compileTimeout = Math.max(
+          features.compileTimeout || 0,
+          featuresB.compileTimeout || 0
         )
       } else {
         // Boolean keys, true is better
@@ -287,7 +308,9 @@ const FeaturesUpdater = {
       user
     ) {
       if (err != null) {
-        logger.warn({ v1UserId }, '[AccountSync] error getting user')
+        OError.tag(err, '[AccountSync] error getting user', {
+          v1UserId
+        })
         return callback(err)
       }
       if ((user != null ? user._id : undefined) == null) {

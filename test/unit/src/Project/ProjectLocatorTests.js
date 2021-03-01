@@ -58,7 +58,6 @@ describe('ProjectLocator', function() {
       requires: {
         '../../models/Project': { Project },
         '../../models/User': { User: this.User },
-        '../Errors/Errors': Errors,
         './ProjectGetter': this.ProjectGetter,
         './ProjectHelper': this.ProjectHelper,
         'logger-sharelatex': {
@@ -374,9 +373,7 @@ describe('ProjectLocator', function() {
     })
 
     it('should take a file path and return the element for a nested document', function(done) {
-      const path = `${subFolder.name}/${secondSubFolder.name}/${
-        subSubFile.name
-      }`
+      const path = `${subFolder.name}/${secondSubFolder.name}/${subSubFile.name}`
       this.locator.findElementByPath(
         { project, path },
         (err, element, type) => {
@@ -566,107 +563,6 @@ describe('ProjectLocator', function() {
           }
         )
       })
-    })
-  })
-
-  describe('findUsersProjectByName finding a project by user_id and project name', function() {
-    it('should return the project from an array case insenstive', function(done) {
-      const userId = '123jojoidns'
-      const stubbedProject = { name: 'findThis' }
-      const projects = {
-        owned: [
-          { name: 'notThis' },
-          { name: 'wellll' },
-          stubbedProject,
-          { name: 'Noooo' }
-        ]
-      }
-      this.ProjectGetter.findAllUsersProjects = sinon
-        .stub()
-        .callsArgWith(2, null, projects)
-      this.locator.findUsersProjectByName(
-        userId,
-        stubbedProject.name.toLowerCase(),
-        (err, project) => {
-          if (err != null) {
-            return done(err)
-          }
-          project.should.equal(stubbedProject)
-          done()
-        }
-      )
-    })
-
-    it('should return the project which is not archived', function(done) {
-      const userId = '123jojoidns'
-      const stubbedProject = { name: 'findThis', _id: 12331321 }
-      const projects = {
-        owned: [
-          { name: 'notThis' },
-          { name: 'wellll' },
-          { name: 'findThis', archived: true, trashed: true },
-          stubbedProject,
-          { name: 'findThis', archived: true, trashed: false },
-          { name: 'Noooo', trashed: true }
-        ]
-      }
-
-      this.ProjectHelper.isArchivedOrTrashed
-        .withArgs(projects.owned[0], userId)
-        .returns(false)
-      this.ProjectHelper.isArchivedOrTrashed
-        .withArgs(projects.owned[1], userId)
-        .returns(false)
-      this.ProjectHelper.isArchivedOrTrashed
-        .withArgs(projects.owned[2], userId)
-        .returns(true)
-      this.ProjectHelper.isArchivedOrTrashed
-        .withArgs(projects.owned[3], userId)
-        .returns(false)
-      this.ProjectHelper.isArchivedOrTrashed
-        .withArgs(projects.owned[4], userId)
-        .returns(true)
-      this.ProjectHelper.isArchivedOrTrashed
-        .withArgs(projects.owned[5], userId)
-        .returns(true)
-
-      this.ProjectGetter.findAllUsersProjects = sinon
-        .stub()
-        .callsArgWith(2, null, projects)
-      this.locator.findUsersProjectByName(
-        userId,
-        stubbedProject.name.toLowerCase(),
-        (err, project) => {
-          if (err != null) {
-            return done(err)
-          }
-          project._id.should.equal(stubbedProject._id)
-          done()
-        }
-      )
-    })
-
-    it('should search collab projects as well', function(done) {
-      const userId = '123jojoidns'
-      const stubbedProject = { name: 'findThis' }
-      const projects = {
-        owned: [{ name: 'notThis' }, { name: 'wellll' }, { name: 'Noooo' }],
-        readAndWrite: [stubbedProject]
-      }
-      this.ProjectGetter.findAllUsersProjects = sinon
-        .stub()
-        .callsArgWith(2, null, projects)
-      this.locator.findUsersProjectByName(
-        userId,
-        stubbedProject.name.toLowerCase(),
-        (err, project) => {
-          if (err != null) {
-            return done(err)
-          }
-          project.should.equal(stubbedProject)
-          done()
-        }
-      )
     })
   })
 })

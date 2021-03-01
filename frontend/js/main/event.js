@@ -83,8 +83,8 @@ App.factory('eventTracking', function($http, localStorage) {
         heartbeatsSent <= 2
           ? 30
           : heartbeatsSent <= 6
-            ? (heartbeatsSent - 2) * 60
-            : 300
+          ? (heartbeatsSent - 2) * 60
+          : 300
 
       return (nextHeartbeat = moment()
         .add(backoffSecs, 'seconds')
@@ -105,8 +105,8 @@ App.factory('eventTracking', function($http, localStorage) {
       })
     },
 
-    sendMBSampled(key, segmentation) {
-      if (Math.random() < 0.01) {
+    sendMBSampled(key, segmentation, rate = 0.01) {
+      if (Math.random() < rate) {
         return this.sendMB(key, segmentation)
       }
     },

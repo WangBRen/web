@@ -1,14 +1,3 @@
-/* eslint-disable
-    max-len,
-    no-return-assign,
-*/
-// TODO: This file was created by bulk-decaffeinate.
-// Fix any style issues and re-enable lint.
-/*
- * decaffeinate suggestions:
- * DS102: Remove unnecessary code created because of implicit returns
- * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
- */
 const SandboxedModule = require('sandboxed-module')
 const sinon = require('sinon')
 require('chai').should()
@@ -45,9 +34,10 @@ describe('TpdsController', function() {
         'logger-sharelatex': {
           log() {},
           warn() {},
+          info() {},
           err() {}
         },
-        'metrics-sharelatex': {
+        '@overleaf/metrics': {
           inc() {}
         }
       }
@@ -158,7 +148,7 @@ describe('TpdsController', function() {
   })
 
   describe('getting a delete update', function() {
-    it('should process the delete with the update reciver', function(done) {
+    it('should process the delete with the update receiver', function(done) {
       const path = '/projectName/here.txt'
       const req = {
         params: { 0: path, user_id: this.user_id },
@@ -187,7 +177,7 @@ describe('TpdsController', function() {
       const path = 'noSlashHere'
       const req = { params: { 0: path, user_id: this.user_id } }
       const result = this.TpdsController.parseParams(req)
-      result.user_id.should.equal(this.user_id)
+      result.userId.should.equal(this.user_id)
       result.filePath.should.equal('/')
       result.projectName.should.equal(path)
     })
@@ -196,7 +186,7 @@ describe('TpdsController', function() {
       const path = '/project/file.tex'
       const req = { params: { 0: path, user_id: this.user_id } }
       const result = this.TpdsController.parseParams(req)
-      result.user_id.should.equal(this.user_id)
+      result.userId.should.equal(this.user_id)
       result.filePath.should.equal('/file.tex')
       result.projectName.should.equal('project')
     })
@@ -227,7 +217,7 @@ describe('TpdsController', function() {
       }
       this.res = { sendStatus: sinon.stub() }
 
-      this.TpdsController.updateProjectContents(this.req, this.res)
+      this.TpdsController.updateProjectContents(this.req, this.res, this.next)
     })
 
     it('should merge the update', function() {
@@ -264,7 +254,7 @@ describe('TpdsController', function() {
       }
       this.res = { sendStatus: sinon.stub() }
 
-      this.TpdsController.deleteProjectContents(this.req, this.res)
+      this.TpdsController.deleteProjectContents(this.req, this.res, this.next)
     })
 
     it('should delete the file', function() {

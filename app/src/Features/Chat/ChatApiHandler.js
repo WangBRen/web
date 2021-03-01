@@ -1,6 +1,6 @@
 /* eslint-disable
     camelcase,
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
 */
 // TODO: This file was created by bulk-decaffeinate.
@@ -12,9 +12,9 @@
  * Full docs: https://github.com/decaffeinate/decaffeinate/blob/master/docs/suggestions.md
  */
 let ChatApiHandler
+const OError = require('@overleaf/o-error')
 const request = require('request')
 const settings = require('settings-sharelatex')
-const logger = require('logger-sharelatex')
 
 module.exports = ChatApiHandler = {
   _apiRequest(opts, callback) {
@@ -28,11 +28,11 @@ module.exports = ChatApiHandler = {
       if (response.statusCode >= 200 && response.statusCode < 300) {
         return callback(null, data)
       } else {
-        error = new Error(
-          `chat api returned non-success code: ${response.statusCode}`
+        error = new OError(
+          `chat api returned non-success code: ${response.statusCode}`,
+          opts
         )
         error.statusCode = response.statusCode
-        logger.warn({ err: error, opts }, 'error sending request to chat api')
         return callback(error)
       }
     })
@@ -41,9 +41,7 @@ module.exports = ChatApiHandler = {
   sendGlobalMessage(project_id, user_id, content, callback) {
     return ChatApiHandler._apiRequest(
       {
-        url: `${
-          settings.apis.chat.internal_url
-        }/project/${project_id}/messages`,
+        url: `${settings.apis.chat.internal_url}/project/${project_id}/messages`,
         method: 'POST',
         json: { user_id, content }
       },
@@ -62,9 +60,7 @@ module.exports = ChatApiHandler = {
 
     return ChatApiHandler._apiRequest(
       {
-        url: `${
-          settings.apis.chat.internal_url
-        }/project/${project_id}/messages`,
+        url: `${settings.apis.chat.internal_url}/project/${project_id}/messages`,
         method: 'GET',
         qs,
         json: true
@@ -79,9 +75,7 @@ module.exports = ChatApiHandler = {
     }
     return ChatApiHandler._apiRequest(
       {
-        url: `${
-          settings.apis.chat.internal_url
-        }/project/${project_id}/thread/${thread_id}/messages`,
+        url: `${settings.apis.chat.internal_url}/project/${project_id}/thread/${thread_id}/messages`,
         method: 'POST',
         json: { user_id, content }
       },
@@ -109,9 +103,7 @@ module.exports = ChatApiHandler = {
     }
     return ChatApiHandler._apiRequest(
       {
-        url: `${
-          settings.apis.chat.internal_url
-        }/project/${project_id}/thread/${thread_id}/resolve`,
+        url: `${settings.apis.chat.internal_url}/project/${project_id}/thread/${thread_id}/resolve`,
         method: 'POST',
         json: { user_id }
       },
@@ -125,9 +117,7 @@ module.exports = ChatApiHandler = {
     }
     return ChatApiHandler._apiRequest(
       {
-        url: `${
-          settings.apis.chat.internal_url
-        }/project/${project_id}/thread/${thread_id}/reopen`,
+        url: `${settings.apis.chat.internal_url}/project/${project_id}/thread/${thread_id}/reopen`,
         method: 'POST'
       },
       callback
@@ -140,9 +130,7 @@ module.exports = ChatApiHandler = {
     }
     return ChatApiHandler._apiRequest(
       {
-        url: `${
-          settings.apis.chat.internal_url
-        }/project/${project_id}/thread/${thread_id}`,
+        url: `${settings.apis.chat.internal_url}/project/${project_id}/thread/${thread_id}`,
         method: 'DELETE'
       },
       callback
@@ -155,9 +143,7 @@ module.exports = ChatApiHandler = {
     }
     return ChatApiHandler._apiRequest(
       {
-        url: `${
-          settings.apis.chat.internal_url
-        }/project/${project_id}/thread/${thread_id}/messages/${message_id}/edit`,
+        url: `${settings.apis.chat.internal_url}/project/${project_id}/thread/${thread_id}/messages/${message_id}/edit`,
         method: 'POST',
         json: {
           content
@@ -173,9 +159,7 @@ module.exports = ChatApiHandler = {
     }
     return ChatApiHandler._apiRequest(
       {
-        url: `${
-          settings.apis.chat.internal_url
-        }/project/${project_id}/thread/${thread_id}/messages/${message_id}`,
+        url: `${settings.apis.chat.internal_url}/project/${project_id}/thread/${thread_id}/messages/${message_id}`,
         method: 'DELETE'
       },
       callback

@@ -1,5 +1,5 @@
 /* eslint-disable
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
     no-return-assign,
 */
@@ -16,11 +16,14 @@ const { expect } = require('chai')
 const sinon = require('sinon')
 const assertCalledWith = sinon.assert.calledWith
 const assertNotCalled = sinon.assert.notCalled
-const mongojs = require('mongojs')
-const { ObjectId } = mongojs
+const { ObjectId } = require('mongodb')
 const modulePath =
   '../../../../app/src/Features/UserMembership/UserMembershipViewModel'
 const SandboxedModule = require('sandboxed-module')
+const {
+  isObjectIdInstance,
+  normalizeQuery
+} = require('../../../../app/src/Features/Helpers/Mongo')
 
 describe('UserMembershipViewModel', function() {
   beforeEach(function() {
@@ -30,7 +33,8 @@ describe('UserMembershipViewModel', function() {
         console: console
       },
       requires: {
-        mongojs: mongojs,
+        mongodb: { ObjectId },
+        '../Helpers/Mongo': { isObjectIdInstance, normalizeQuery },
         '../User/UserGetter': this.UserGetter
       }
     })
@@ -38,7 +42,8 @@ describe('UserMembershipViewModel', function() {
     this.user = {
       _id: 'mock-user-id',
       email: 'mock-email@baz.com',
-      first_name: 'Name'
+      first_name: 'Name',
+      lastLoggedIn: '2020-05-20T10:41:11.407Z'
     }
   })
 
@@ -48,6 +53,7 @@ describe('UserMembershipViewModel', function() {
       return expect(viewModel).to.deep.equal({
         email: this.email,
         invite: true,
+        last_logged_in_at: null,
         first_name: null,
         last_name: null,
         _id: null
@@ -58,6 +64,7 @@ describe('UserMembershipViewModel', function() {
       const viewModel = this.UserMembershipViewModel.build(this.user)
       expect(viewModel._id).to.equal(this.user._id)
       expect(viewModel.email).to.equal(this.user.email)
+      expect(viewModel.last_logged_in_at).to.equal(this.user.lastLoggedIn)
       return expect(viewModel.invite).to.equal(false)
     })
   })

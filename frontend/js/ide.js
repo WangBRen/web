@@ -18,6 +18,7 @@
  */
 import App from './base'
 import FileTreeManager from './ide/file-tree/FileTreeManager'
+import LoadingManager from './ide/LoadingManager'
 import ConnectionManager from './ide/connection/ConnectionManager'
 import EditorManager from './ide/editor/EditorManager'
 import OnlineUsersManager from './ide/online-users/OnlineUsersManager'
@@ -29,6 +30,7 @@ import BinaryFilesManager from './ide/binary-files/BinaryFilesManager'
 import ReferencesManager from './ide/references/ReferencesManager'
 import MetadataManager from './ide/metadata/MetadataManager'
 import ReviewPanelManager from './ide/review-panel/ReviewPanelManager'
+import OutlineManager from './features/outline/outline-manager'
 import SafariScrollPatcher from './ide/SafariScrollPatcher'
 import './ide/cobranding/CobrandingDataService'
 import './ide/settings/index'
@@ -39,6 +41,7 @@ import './ide/hotkeys/index'
 import './ide/wordcount/index'
 import './ide/directives/layout'
 import './ide/directives/validFile'
+import './ide/directives/verticalResizablePanes'
 import './ide/services/ide'
 import './directives/focus'
 import './directives/fineUpload'
@@ -54,10 +57,13 @@ import './services/validateCaptchaV3'
 import './services/wait-for'
 import './filters/formatDate'
 import './main/event'
-import './main/account-upgrade'
-import './main/exposed-settings'
+import './main/account-upgrade-angular'
+import './main/exposed-settings-angular'
 import './main/system-messages'
 import '../../modules/modules-ide.js'
+import './shared/context/controllers/root-context-controller'
+import './features/editor-navigation-toolbar/controllers/editor-navigation-toolbar-controller'
+
 App.controller('IdeController', function(
   $scope,
   $timeout,
@@ -97,8 +103,8 @@ App.controller('IdeController', function(
     pdfWidth: 0,
     reviewPanelOpen: localStorage(`ui.reviewPanelOpen.${window.project_id}`),
     miniReviewPanelVisible: false,
-    chatResizerSizeOpen: window.uiConfig.chatResizerSizeOpen,
-    chatResizerSizeClosed: window.uiConfig.chatResizerSizeClosed
+    chatResizerSizeOpen: 7,
+    chatResizerSizeClosed: 7
   }
   $scope.user = window.user
 
@@ -178,6 +184,7 @@ App.controller('IdeController', function(
   ide.$scope = $scope
 
   ide.referencesSearchManager = new ReferencesManager(ide, $scope)
+  ide.loadingManager = new LoadingManager($scope)
   ide.connectionManager = new ConnectionManager(ide, $scope)
   ide.fileTreeManager = new FileTreeManager(ide, $scope)
   ide.editorManager = new EditorManager(ide, $scope, localStorage)
@@ -191,6 +198,7 @@ App.controller('IdeController', function(
   ide.permissionsManager = new PermissionsManager(ide, $scope)
   ide.binaryFilesManager = new BinaryFilesManager(ide, $scope)
   ide.metadataManager = new MetadataManager(ide, $scope, metadata)
+  ide.outlineManager = new OutlineManager(ide, $scope)
 
   let inited = false
   $scope.$on('project:joined', function() {

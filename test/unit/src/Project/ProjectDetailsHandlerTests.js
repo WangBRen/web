@@ -3,6 +3,7 @@ const sinon = require('sinon')
 const { expect } = require('chai')
 const { ObjectId } = require('mongodb')
 const Errors = require('../../../../app/src/Features/Errors/Errors')
+const ProjectHelper = require('../../../../app/src/Features/Project/ProjectHelper')
 
 const MODULE_PATH = '../../../../app/src/Features/Project/ProjectDetailsHandler'
 
@@ -43,7 +44,7 @@ describe('ProjectDetailsHandler', function() {
       exec: sinon.stub().resolves()
     }
     this.ProjectModel = {
-      update: sinon.stub().returns(this.ProjectModelUpdateQuery)
+      updateOne: sinon.stub().returns(this.ProjectModelUpdateQuery)
     }
     this.UserGetter = {
       promises: {
@@ -69,6 +70,7 @@ describe('ProjectDetailsHandler', function() {
         console: console
       },
       requires: {
+        './ProjectHelper': ProjectHelper,
         './ProjectGetter': this.ProjectGetter,
         '../../models/Project': {
           Project: this.ProjectModel
@@ -81,7 +83,6 @@ describe('ProjectDetailsHandler', function() {
           err() {}
         },
         './ProjectTokenGenerator': this.ProjectTokenGenerator,
-        '../Errors/Errors': Errors,
         'settings-sharelatex': this.settings
       }
     })
@@ -128,10 +129,9 @@ describe('ProjectDetailsHandler', function() {
     it('should make a call to mongo just for the description', async function() {
       this.ProjectGetter.promises.getProject.resolves()
       await this.handler.promises.getProjectDescription(this.project._id)
-      expect(this.ProjectGetter.promises.getProject).to.have.been.calledWith(
-        this.project._id,
-        { description: true }
-      )
+      expect(
+        this.ProjectGetter.promises.getProject
+      ).to.have.been.calledWith(this.project._id, { description: true })
     })
 
     it('should return what the mongo call returns', async function() {
@@ -156,7 +156,7 @@ describe('ProjectDetailsHandler', function() {
         this.project._id,
         this.description
       )
-      expect(this.ProjectModel.update).to.have.been.calledWith(
+      expect(this.ProjectModel.updateOne).to.have.been.calledWith(
         { _id: this.project._id },
         { description: this.description }
       )
@@ -170,7 +170,7 @@ describe('ProjectDetailsHandler', function() {
 
     it('should update the project with the new name', async function() {
       await this.handler.promises.renameProject(this.project._id, this.newName)
-      expect(this.ProjectModel.update).to.have.been.calledWith(
+      expect(this.ProjectModel.updateOne).to.have.been.calledWith(
         { _id: this.project._id },
         { name: this.newName }
       )
@@ -191,7 +191,7 @@ describe('ProjectDetailsHandler', function() {
       await expect(this.handler.promises.renameProject(this.project._id)).to.be
         .rejected
       expect(this.TpdsUpdateSender.promises.moveEntity).not.to.have.been.called
-      expect(this.ProjectModel.update).not.to.have.been.called
+      expect(this.ProjectModel.updateOne).not.to.have.been.called
     })
   })
 
@@ -227,6 +227,7 @@ describe('ProjectDetailsHandler', function() {
   })
 
   describe('generateUniqueName', function() {
+    // actually testing `ProjectHelper.promises.ensureNameIsUnique()`
     beforeEach(function() {
       this.longName = 'x'.repeat(this.handler.MAX_PROJECT_NAME_LENGTH - 5)
       const usersProjects = {
@@ -267,8 +268,14 @@ describe('ProjectDetailsHandler', function() {
           { _id: 139, name: 'numeric (39)' },
           { _id: 140, name: 'numeric (40)' }
         ],
-        readAndWrite: [{ _id: 4, name: 'name2' }, { _id: 5, name: 'name22' }],
-        readOnly: [{ _id: 6, name: 'name3' }, { _id: 7, name: 'name33' }],
+        readAndWrite: [
+          { _id: 4, name: 'name2' },
+          { _id: 5, name: 'name22' }
+        ],
+        readOnly: [
+          { _id: 6, name: 'name3' },
+          { _id: 7, name: 'name33' }
+        ],
         tokenReadAndWrite: [
           { _id: 8, name: 'name4' },
           { _id: 9, name: 'name44' }
@@ -401,7 +408,7 @@ describe('ProjectDetailsHandler', function() {
         this.project._id,
         this.accessLevel
       )
-      expect(this.ProjectModel.update).to.have.been.calledWith(
+      expect(this.ProjectModel.updateOne).to.have.been.calledWith(
         { _id: this.project._id },
         { publicAccesLevel: this.accessLevel }
       )
@@ -459,7 +466,7 @@ describe('ProjectDetailsHandler', function() {
 
       it('should not update the project with new tokens', async function() {
         await this.handler.promises.ensureTokensArePresent(this.project._id)
-        expect(this.ProjectModel.update).not.to.have.been.called
+        expect(this.ProjectModel.updateOne).not.to.have.been.called
       })
 
       it('should produce the tokens without error', async function() {
@@ -503,8 +510,8 @@ describe('ProjectDetailsHandler', function() {
           .to.have.been.calledOnce
         expect(this.ProjectTokenGenerator.readAndWriteToken).to.have.been
           .calledOnce
-        expect(this.ProjectModel.update).to.have.been.calledOnce
-        expect(this.ProjectModel.update).to.have.been.calledWith(
+        expect(this.ProjectModel.updateOne).to.have.been.calledOnce
+        expect(this.ProjectModel.updateOne).to.have.been.calledWith(
           { _id: this.project._id },
           {
             $set: {
@@ -534,7 +541,7 @@ describe('ProjectDetailsHandler', function() {
   describe('clearTokens', function() {
     it('clears the tokens from the project', async function() {
       await this.handler.promises.clearTokens(this.project._id)
-      expect(this.ProjectModel.update).to.have.been.calledWith(
+      expect(this.ProjectModel.updateOne).to.have.been.calledWith(
         { _id: this.project._id },
         { $unset: { tokens: 1 }, $set: { publicAccesLevel: 'private' } }
       )

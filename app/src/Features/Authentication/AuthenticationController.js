@@ -1,7 +1,8 @@
 const AuthenticationManager = require('./AuthenticationManager')
+const OError = require('@overleaf/o-error')
 const LoginRateLimiter = require('../Security/LoginRateLimiter')
 const UserUpdater = require('../User/UserUpdater')
-const Metrics = require('metrics-sharelatex')
+const Metrics = require('@overleaf/metrics')
 const logger = require('logger-sharelatex')
 const querystring = require('querystring')
 const Settings = require('settings-sharelatex')
@@ -15,10 +16,17 @@ const passport = require('passport')
 const NotificationsBuilder = require('../Notifications/NotificationsBuilder')
 const UrlHelper = require('../Helpers/UrlHelper')
 const AsyncFormHelper = require('../Helpers/AsyncFormHelper')
-const SudoModeHandler = require('../SudoMode/SudoModeHandler')
 const _ = require('lodash')
+const {
+  acceptsJson
+} = require('../../infrastructure/RequestContentTypeDetection')
 
-const AuthenticationController = (module.exports = {
+function send401WithChallenge(res) {
+  res.setHeader('WWW-Authenticate', 'OverleafLogin')
+  res.sendStatus(401)
+}
+
+const AuthenticationController = {
   serializeUser(user, callback) {
     if (!user._id || !user.email) {
       const err = new Error('serializeUser called with non-user object')
@@ -94,16 +102,8 @@ const AuthenticationController = (module.exports = {
         if (err) {
           return next(err)
         }
-        SudoModeHandler.activateSudoMode(user._id, function(err) {
-          if (err) {
-            logger.err(
-              { err, user_id: user._id },
-              'Error activating Sudo Mode on login, continuing'
-            )
-          }
-          AuthenticationController._clearRedirectFromSession(req)
-          AsyncFormHelper.redirect(req, res, redir)
-        })
+        AuthenticationController._clearRedirectFromSession(req)
+        AsyncFormHelper.redirect(req, res, redir)
       })
     })
   },
@@ -213,6 +213,7 @@ const AuthenticationController = (module.exports = {
         next = function() {}
       }
       if (!AuthenticationController.isUserLoggedIn(req)) {
+        if (acceptsJson(req)) return send401WithChallenge(res)
         return AuthenticationController._redirectToLoginOrRegisterPage(req, res)
       } else {
         req.user = AuthenticationController.getSessionUser(req)
@@ -272,6 +273,7 @@ const AuthenticationController = (module.exports = {
           // need to destroy the existing session and generate a new one
           // otherwise they will already be logged in when they are redirected
           // to the login page
+          if (acceptsJson(req)) return send401WithChallenge(res)
           AuthenticationController._redirectToLoginOrRegisterPage(req, res)
         })
       } else {
@@ -294,7 +296,7 @@ const AuthenticationController = (module.exports = {
       return next()
     }
 
-    if (req.headers['authorization'] != null) {
+    if (req.headers.authorization != null) {
       AuthenticationController.httpAuth(req, res, next)
     } else if (AuthenticationController.isUserLoggedIn(req)) {
       next()
@@ -303,9 +305,41 @@ const AuthenticationController = (module.exports = {
         { url: req.url },
         'user trying to access endpoint not in global whitelist'
       )
+      if (acceptsJson(req)) return send401WithChallenge(res)
       AuthenticationController.setRedirectInSession(req)
       res.redirect('/login')
     }
+  },
+
+  validateAdmin(req, res, next) {
+    const adminDomains = Settings.adminDomains
+    if (
+      !adminDomains ||
+      !(Array.isArray(adminDomains) && adminDomains.length)
+    ) {
+      return next()
+    }
+    const user = AuthenticationController.getSessionUser(req)
+    if (!(user && user.isAdmin)) {
+      return next()
+    }
+    const email = user.email
+    if (email == null) {
+      return next(
+        new OError('[ValidateAdmin] Admin user without email address', {
+          userId: user._id
+        })
+      )
+    }
+    if (!adminDomains.find(domain => email.endsWith(`@${domain}`))) {
+      return next(
+        new OError('[ValidateAdmin] Admin user with invalid email domain', {
+          email: email,
+          userId: user._id
+        })
+      )
+    }
+    return next()
   },
 
   httpAuth: basicAuth(function(user, pass) {
@@ -420,7 +454,7 @@ const AuthenticationController = (module.exports = {
       delete req.session.postLoginRedirect
     }
   }
-})
+}
 
 function _afterLoginSessionSetup(req, user, callback) {
   if (callback == null) {
@@ -428,7 +462,9 @@ function _afterLoginSessionSetup(req, user, callback) {
   }
   req.login(user, function(err) {
     if (err) {
-      logger.warn({ user_id: user._id, err }, 'error from req.login')
+      OError.tag(err, 'error from req.login', {
+        user_id: user._id
+      })
       return callback(err)
     }
     // Regenerate the session to get a new sessionID (cookie value) to
@@ -436,10 +472,9 @@ function _afterLoginSessionSetup(req, user, callback) {
     const oldSession = req.session
     req.session.destroy(function(err) {
       if (err) {
-        logger.warn(
-          { user_id: user._id, err },
-          'error when trying to destroy old session'
-        )
+        OError.tag(err, 'error when trying to destroy old session', {
+          user_id: user._id
+        })
         return callback(err)
       }
       req.sessionStore.generate(req)
@@ -453,10 +488,9 @@ function _afterLoginSessionSetup(req, user, callback) {
       }
       req.session.save(function(err) {
         if (err) {
-          logger.warn(
-            { user_id: user._id },
-            'error saving regenerated session after login'
-          )
+          OError.tag(err, 'error saving regenerated session after login', {
+            user_id: user._id
+          })
           return callback(err)
         }
         UserSessionsManager.trackSession(user, req.sessionID, function() {})
@@ -484,3 +518,5 @@ function _loginAsyncHandlers(req, user) {
   // capture the request ip for use when creating the session
   return (user._login_req_ip = req.ip)
 }
+
+module.exports = AuthenticationController

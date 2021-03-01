@@ -1,12 +1,11 @@
-const { db } = require('../../infrastructure/mongojs')
+const { db, ObjectId } = require('../../infrastructure/mongodb')
+const OError = require('@overleaf/o-error')
 const async = require('async')
 const { promisifyAll } = require('../../util/promises')
 const { Subscription } = require('../../models/Subscription')
 const SubscriptionLocator = require('./SubscriptionLocator')
 const UserGetter = require('../User/UserGetter')
 const PlansLocator = require('./PlansLocator')
-const logger = require('logger-sharelatex')
-const { ObjectId } = require('mongoose').Types
 const FeaturesUpdater = require('./FeaturesUpdater')
 const { DeletedSubscription } = require('../../models/DeletedSubscription')
 
@@ -38,7 +37,7 @@ const SubscriptionUpdater = {
     } else {
       update.$set.manager_ids = [ObjectId(adminId)]
     }
-    Subscription.update(query, update, callback)
+    Subscription.updateOne(query, update, callback)
   },
 
   syncSubscription(recurlySubscription, adminUserId, requesterData, callback) {
@@ -100,17 +99,17 @@ const SubscriptionUpdater = {
     const searchOps = { _id: subscriptionId }
     const insertOperation = { $addToSet: { member_ids: { $each: memberIds } } }
 
-    Subscription.findAndModify(searchOps, insertOperation, callback)
+    Subscription.updateOne(searchOps, insertOperation, callback)
   },
 
   removeUserFromGroups(filter, userId, callback) {
     const removeOperation = { $pull: { member_ids: userId } }
     Subscription.updateMany(filter, removeOperation, function(err) {
       if (err != null) {
-        logger.warn(
-          { err, filter, removeOperation },
-          'error removing user from groups'
-        )
+        OError.tag(err, 'error removing user from groups', {
+          filter,
+          removeOperation
+        })
         return callback(err)
       }
       UserGetter.getUser(userId, function(error, user) {
@@ -169,7 +168,7 @@ const SubscriptionUpdater = {
           ),
         cb =>
           // 2. remove subscription
-          Subscription.remove({ _id: subscription._id }, cb),
+          Subscription.deleteOne({ _id: subscription._id }, cb),
         cb =>
           // 3. refresh users features
           SubscriptionUpdater._refreshUsersFeatures(subscription, cb)
@@ -191,7 +190,7 @@ const SubscriptionUpdater = {
         [
           cb =>
             // 1. upsert subscription
-            db.subscriptions.update(
+            db.subscriptions.updateOne(
               { _id: subscription._id },
               subscription,
               { upsert: true },
@@ -271,6 +270,19 @@ const SubscriptionUpdater = {
       }
       subscription.groupPlan = true
       subscription.membersLimit = plan.membersLimit
+
+      // Some plans allow adding more seats than the base plan provides.
+      // This is recorded as a subscription add on.
+      if (
+        plan.membersLimitAddOn &&
+        Array.isArray(recurlySubscription.subscription_add_ons)
+      ) {
+        recurlySubscription.subscription_add_ons.forEach(addOn => {
+          if (addOn.add_on_code === plan.membersLimitAddOn) {
+            subscription.membersLimit += addOn.quantity
+          }
+        })
+      }
     }
     subscription.save(function(error) {
       if (error) {

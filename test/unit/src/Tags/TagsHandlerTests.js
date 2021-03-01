@@ -3,7 +3,7 @@ const { expect } = require('chai')
 require('chai').should()
 const sinon = require('sinon')
 const { Tag } = require('../helpers/models/Tag')
-const { ObjectId } = require('mongojs')
+const { ObjectId } = require('mongodb')
 const modulePath = require('path').join(
   __dirname,
   '../../../../app/src/Features/Tags/TagsHandler.js'
@@ -18,12 +18,12 @@ describe('TagsHandler', function() {
     this.tagId = ObjectId().toString()
     this.projectId = ObjectId().toString()
 
-    this.mongojs = { ObjectId: ObjectId }
+    this.mongodb = { ObjectId: ObjectId }
     this.TagMock = sinon.mock(Tag)
 
     this.TagsHandler = SandboxedModule.require(modulePath, {
       requires: {
-        '../../infrastructure/mongojs': this.mongojs,
+        '../../infrastructure/mongodb': this.mongodb,
         '../../models/Tag': { Tag: Tag }
       }
     })
@@ -124,7 +124,7 @@ describe('TagsHandler', function() {
 
   describe('addProjectToTagName', function() {
     it('should call update in mongo', function(done) {
-      this.TagMock.expects('update')
+      this.TagMock.expects('updateOne')
         .once()
         .withArgs(
           { name: this.tag.name, user_id: this.tag.userId },
@@ -148,12 +148,11 @@ describe('TagsHandler', function() {
   describe('updateTagUserIds', function() {
     it('should call update in mongo', function(done) {
       this.newUserId = ObjectId().toString()
-      this.TagMock.expects('update')
+      this.TagMock.expects('updateMany')
         .once()
         .withArgs(
           { user_id: this.userId },
-          { $set: { user_id: this.newUserId } },
-          { multi: true }
+          { $set: { user_id: this.newUserId } }
         )
         .yields()
       this.TagsHandler.updateTagUserIds(this.userId, this.newUserId, err => {
@@ -167,7 +166,7 @@ describe('TagsHandler', function() {
   describe('removeProjectFromTag', function() {
     describe('with a valid tag_id', function() {
       it('should call update in mongo', function(done) {
-        this.TagMock.expects('update')
+        this.TagMock.expects('updateOne')
           .once()
           .withArgs(
             {
@@ -195,7 +194,7 @@ describe('TagsHandler', function() {
 
   describe('removeProjectFromAllTags', function() {
     it('should pull the project id from the tag', function(done) {
-      this.TagMock.expects('update')
+      this.TagMock.expects('updateMany')
         .once()
         .withArgs(
           {
@@ -221,7 +220,7 @@ describe('TagsHandler', function() {
   describe('deleteTag', function() {
     describe('with a valid tag_id', function() {
       it('should call remove in mongo', function(done) {
-        this.TagMock.expects('remove')
+        this.TagMock.expects('deleteOne')
           .once()
           .withArgs({ _id: this.tagId, user_id: this.userId })
           .yields()
@@ -238,7 +237,7 @@ describe('TagsHandler', function() {
     describe('with a valid tag_id', function() {
       it('should call remove in mongo', function(done) {
         this.newName = 'new name'
-        this.TagMock.expects('update')
+        this.TagMock.expects('updateOne')
           .once()
           .withArgs(
             { _id: this.tagId, user_id: this.userId },

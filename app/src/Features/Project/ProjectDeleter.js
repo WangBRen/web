@@ -1,4 +1,5 @@
-const { db, ObjectId } = require('../../infrastructure/mongojs')
+const _ = require('lodash')
+const { db, ObjectId } = require('../../infrastructure/mongodb')
 const { callbackify } = require('util')
 const { Project } = require('../../models/Project')
 const { DeletedProject } = require('../../models/DeletedProject')
@@ -18,6 +19,7 @@ const moment = require('moment')
 const { promiseMapWithLimit } = require('../../util/promises')
 
 const EXPIRE_PROJECTS_AFTER_DAYS = 90
+const PROJECT_EXPIRATION_BATCH_SIZE = 10000
 
 module.exports = {
   markAsDeletedByExternalSource: callbackify(markAsDeletedByExternalSource),
@@ -55,7 +57,7 @@ async function markAsDeletedByExternalSource(projectId) {
     { project_id: projectId },
     'marking project as deleted by external data source'
   )
-  await Project.update(
+  await Project.updateOne(
     { _id: projectId },
     { deletedByExternalDataSource: true }
   ).exec()
@@ -66,7 +68,7 @@ async function markAsDeletedByExternalSource(projectId) {
 }
 
 async function unmarkAsDeletedByExternalSource(projectId) {
-  await Project.update(
+  await Project.updateOne(
     { _id: projectId },
     { deletedByExternalDataSource: false }
   ).exec()
@@ -79,19 +81,29 @@ async function deleteUsersProjects(userId) {
 }
 
 async function expireDeletedProjectsAfterDuration() {
-  const deletedProjects = await DeletedProject.find({
-    'deleterData.deletedAt': {
-      $lt: new Date(moment().subtract(EXPIRE_PROJECTS_AFTER_DAYS, 'days'))
+  const deletedProjects = await DeletedProject.find(
+    {
+      'deleterData.deletedAt': {
+        $lt: new Date(moment().subtract(EXPIRE_PROJECTS_AFTER_DAYS, 'days'))
+      },
+      project: { $ne: null }
     },
-    project: { $ne: null }
-  })
-  for (const deletedProject of deletedProjects) {
-    await expireDeletedProject(deletedProject.deleterData.deletedProjectId)
+    { 'deleterData.deletedProjectId': 1 }
+  )
+    .limit(PROJECT_EXPIRATION_BATCH_SIZE)
+    .read('secondary')
+  const projectIds = _.shuffle(
+    deletedProjects.map(
+      deletedProject => deletedProject.deleterData.deletedProjectId
+    )
+  )
+  for (const projectId of projectIds) {
+    await expireDeletedProject(projectId)
   }
 }
 
 async function restoreProject(projectId) {
-  await Project.update(
+  await Project.updateOne(
     { _id: projectId },
     { $unset: { archived: true } }
   ).exec()
@@ -109,7 +121,7 @@ async function archiveProject(projectId, userId) {
       'ARCHIVE'
     )
 
-    await Project.update(
+    await Project.updateOne(
       { _id: projectId },
       { $set: { archived: archived }, $pull: { trashed: ObjectId(userId) } }
     )
@@ -132,7 +144,10 @@ async function unarchiveProject(projectId, userId) {
       'UNARCHIVE'
     )
 
-    await Project.update({ _id: projectId }, { $set: { archived: archived } })
+    await Project.updateOne(
+      { _id: projectId },
+      { $set: { archived: archived } }
+    )
   } catch (err) {
     logger.warn({ err }, 'problem unarchiving project')
     throw err
@@ -152,7 +167,7 @@ async function trashProject(projectId, userId) {
       'UNARCHIVE'
     )
 
-    await Project.update(
+    await Project.updateOne(
       { _id: projectId },
       {
         $addToSet: { trashed: ObjectId(userId) },
@@ -172,7 +187,7 @@ async function untrashProject(projectId, userId) {
       throw new Errors.NotFoundError('project not found')
     }
 
-    await Project.update(
+    await Project.updateOne(
       { _id: projectId },
       { $pull: { trashed: ObjectId(userId) } }
     )
@@ -213,11 +228,11 @@ async function deleteProject(projectId, options = {}) {
       deletedProjectLastUpdatedAt: project.lastUpdated
     }
 
-    Object.keys(deleterData).forEach(
-      key => (deleterData[key] === undefined ? delete deleterData[key] : '')
+    Object.keys(deleterData).forEach(key =>
+      deleterData[key] === undefined ? delete deleterData[key] : ''
     )
 
-    await DeletedProject.update(
+    await DeletedProject.updateOne(
       { 'deleterData.deletedProjectId': projectId },
       { project, deleterData },
       { upsert: true }
@@ -226,6 +241,18 @@ async function deleteProject(projectId, options = {}) {
     await DocumentUpdaterHandler.promises.flushProjectToMongoAndDelete(
       projectId
     )
+
+    try {
+      // OPTIMIZATION: flush docs out of mongo
+      await DocstoreManager.promises.archiveProject(projectId)
+    } catch (err) {
+      // It is OK to fail here, the docs will get hard-deleted eventually after
+      //  the grace-period for soft-deleted projects has passed.
+      logger.warn(
+        { projectId, err },
+        'failed archiving doc via docstore as part of project soft-deletion'
+      )
+    }
 
     const memberIds = await CollaboratorsGetter.promises.getMemberIds(projectId)
 
@@ -241,7 +268,7 @@ async function deleteProject(projectId, options = {}) {
         })
     }
 
-    await Project.remove({ _id: projectId }).exec()
+    await Project.deleteOne({ _id: projectId }).exec()
   } catch (err) {
     logger.warn({ err }, 'problem deleting project')
     throw err
@@ -250,7 +277,7 @@ async function deleteProject(projectId, options = {}) {
   logger.log({ project_id: projectId }, 'successfully deleted project')
 }
 
-async function undeleteProject(projectId) {
+async function undeleteProject(projectId, options = {}) {
   let deletedProject = await DeletedProject.findOne({
     'deleterData.deletedProjectId': projectId
   }).exec()
@@ -265,6 +292,10 @@ async function undeleteProject(projectId) {
 
   let restored = new Project(deletedProject.project)
 
+  if (options.userId) {
+    restored.owner_ref = options.userId
+  }
+
   // if we're undeleting, we want the document to show up
   restored.name = await ProjectDetailsHandler.promises.generateUniqueName(
     deletedProject.deleterData.deletedProjectOwnerId,
@@ -276,16 +307,7 @@ async function undeleteProject(projectId) {
   // create a new document with an _id already specified. We need to
   // insert it directly into the collection
 
-  // db.projects.insert doesn't work with promisify
-  await new Promise((resolve, reject) => {
-    db.projects.insert(restored, err => {
-      if (err) {
-        reject(err)
-      } else {
-        resolve()
-      }
-    })
-  })
+  await db.projects.insertOne(restored)
   await DeletedProject.deleteOne({ _id: deletedProject._id }).exec()
 }
 
@@ -307,11 +329,21 @@ async function expireDeletedProject(projectId) {
       return
     }
 
-    await DocstoreManager.promises.destroyProject(deletedProject.project._id)
-    await HistoryManager.promises.deleteProject(deletedProject.project._id)
-    await FilestoreHandler.promises.deleteProject(deletedProject.project._id)
+    const historyId =
+      deletedProject.project.overleaf &&
+      deletedProject.project.overleaf.history &&
+      deletedProject.project.overleaf.history.id
 
-    await DeletedProject.update(
+    await Promise.all([
+      DocstoreManager.promises.destroyProject(deletedProject.project._id),
+      HistoryManager.promises.deleteProject(
+        deletedProject.project._id,
+        historyId
+      ),
+      FilestoreHandler.promises.deleteProject(deletedProject.project._id)
+    ])
+
+    await DeletedProject.updateOne(
       {
         _id: deletedProject._id
       },

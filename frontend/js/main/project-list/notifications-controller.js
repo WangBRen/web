@@ -44,9 +44,7 @@ App.controller('ProjectInviteNotificationController', function($scope, $http) {
   $scope.accept = function() {
     $scope.notification.inflight = true
     return $http({
-      url: `/project/${
-        $scope.notification.messageOpts.projectId
-      }/invite/token/${$scope.notification.messageOpts.token}/accept`,
+      url: `/project/${$scope.notification.messageOpts.projectId}/invite/token/${$scope.notification.messageOpts.token}/accept`,
       method: 'POST',
       headers: {
         'X-Csrf-Token': window.csrfToken,
@@ -76,7 +74,7 @@ App.controller('EmailNotificationController', function(
   $http,
   UserAffiliationsDataService
 ) {
-  $scope.userEmails = []
+  $scope.userEmails = window.data.userEmails
   const _ssoAvailable = email => {
     if (!ExposedSettings.hasSamlFeature) return false
     if (email.samlProviderId) return true
@@ -103,21 +101,21 @@ App.controller('EmailNotificationController', function(
     userEmail.hide = false
   }
 
-  const _getUserEmails = () =>
-    UserAffiliationsDataService.getUserEmails().then(function(emails) {
-      $scope.userEmails = emails
-      $scope.$emit('project-list:notifications-received')
-    })
-  _getUserEmails()
-
   $scope.resendConfirmationEmail = function(userEmail) {
     userEmail.confirmationInflight = true
-    return UserAffiliationsDataService.resendConfirmationEmail(
-      userEmail.email
-    ).then(function() {
-      userEmail.hide = true
-      userEmail.confirmationInflight = false
-      $scope.$emit('project-list:notifications-received')
-    })
+    userEmail.error = false
+    UserAffiliationsDataService.resendConfirmationEmail(userEmail.email)
+      .then(() => {
+        userEmail.hide = true
+        $scope.$emit('project-list:notifications-received')
+      })
+      .catch(error => {
+        userEmail.error = true
+        console.error(error)
+        $scope.$emit('project-list:notifications-received')
+      })
+      .finally(() => {
+        userEmail.confirmationInflight = false
+      })
   }
 })

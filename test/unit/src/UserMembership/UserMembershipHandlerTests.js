@@ -1,5 +1,5 @@
 /* eslint-disable
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
     no-return-assign,
     no-unused-vars,
@@ -17,7 +17,7 @@ const { expect } = require('chai')
 const sinon = require('sinon')
 const assertCalledWith = sinon.assert.calledWith
 const assertNotCalled = sinon.assert.notCalled
-const { ObjectId } = require('../../../../app/src/infrastructure/mongojs')
+const { ObjectId } = require('mongodb')
 const modulePath =
   '../../../../app/src/Features/UserMembership/UserMembershipHandler'
 const SandboxedModule = require('sandboxed-module')
@@ -43,13 +43,13 @@ describe('UserMembershipHandler', function() {
       _id: 'mock-institution-id',
       v1Id: 123,
       managerIds: [ObjectId(), ObjectId(), ObjectId()],
-      update: sinon.stub().yields(null)
+      updateOne: sinon.stub().yields(null)
     }
     this.publisher = {
       _id: 'mock-publisher-id',
       slug: 'slug',
       managerIds: [ObjectId(), ObjectId()],
-      update: sinon.stub().yields(null)
+      updateOne: sinon.stub().yields(null)
     }
 
     this.UserMembershipViewModel = {
@@ -72,9 +72,9 @@ describe('UserMembershipHandler', function() {
         console: console
       },
       requires: {
+        mongodb: { ObjectId },
         './UserMembershipViewModel': this.UserMembershipViewModel,
         '../User/UserGetter': this.UserGetter,
-        '../Errors/Errors': Errors,
         '../../models/Institution': {
           Institution: this.Institution
         },
@@ -227,7 +227,7 @@ describe('UserMembershipHandler', function() {
           EntityConfigs.institution,
           this.email,
           (error, user) => {
-            assertCalledWith(this.institution.update, {
+            assertCalledWith(this.institution.updateOne, {
               $addToSet: { managerIds: this.newUser._id }
             })
             return done()
@@ -257,8 +257,8 @@ describe('UserMembershipHandler', function() {
           EntityConfigs.institution,
           this.newUser._id,
           (error, user) => {
-            const { lastCall } = this.institution.update
-            assertCalledWith(this.institution.update, {
+            const { lastCall } = this.institution.updateOne
+            assertCalledWith(this.institution.updateOne, {
               $pull: { managerIds: this.newUser._id }
             })
             return done()

@@ -1,6 +1,6 @@
 const { expect } = require('chai')
 const mkdirp = require('mkdirp')
-const { ObjectId } = require('mongojs')
+const { ObjectId } = require('mongodb')
 const Path = require('path')
 const fs = require('fs')
 const Settings = require('settings-sharelatex')
@@ -9,10 +9,14 @@ const _ = require('underscore')
 const { Project } = require('../../../app/src/models/Project')
 const ProjectGetter = require('../../../app/src/Features/Project/ProjectGetter.js')
 
-const MockDocUpdaterApi = require('./helpers/MockDocUpdaterApi')
-require('./helpers/MockFileStoreApi')
-require('./helpers/MockProjectHistoryApi')
 const User = require('./helpers/User')
+const MockDocUpdaterApiClass = require('./mocks/MockDocUpdaterApi')
+
+let MockDocUpdaterApi
+
+before(function() {
+  MockDocUpdaterApi = MockDocUpdaterApiClass.instance()
+})
 
 describe('ProjectStructureChanges', function() {
   let owner
@@ -97,47 +101,21 @@ describe('ProjectStructureChanges', function() {
     contentType,
     callback
   ) {
-    const imageFile = fs.createReadStream(
-      Path.resolve(Path.join(__dirname, '..', 'files', file))
-    )
-
-    owner.request.post(
-      {
-        uri: `project/${projectId}/upload`,
-        qs: {
-          folder_id: folderId
-        },
-        formData: {
-          qqfile: {
-            value: imageFile,
-            options: {
-              filename: name,
-              contentType: contentType
-            }
-          }
-        }
-      },
-      (error, res, body) => {
-        if (error) {
-          return callback(error)
-        }
-        if (res.statusCode < 200 || res.statusCode >= 300) {
-          return callback(new Error(`failed to upload file ${res.statusCode}`))
-        }
-
-        callback(null, JSON.parse(body).entity_id)
-      }
+    owner.uploadFileInProject(
+      projectId,
+      folderId,
+      file,
+      name,
+      contentType,
+      callback
     )
   }
 
   function uploadExampleFile(owner, projectId, folderId, callback) {
-    uploadFile(
-      owner,
+    owner.uploadExampleFileInProject(
       projectId,
       folderId,
       '1pixel.png',
-      '1pixel.png',
-      'image/png',
       callback
     )
   }
@@ -175,66 +153,15 @@ describe('ProjectStructureChanges', function() {
   }
 
   function moveItem(owner, projectId, type, itemId, folderId, callback) {
-    owner.request.post(
-      {
-        uri: `project/${projectId}/${type}/${itemId}/move`,
-        json: {
-          folder_id: folderId
-        }
-      },
-      (error, res) => {
-        if (error) {
-          return callback(error)
-        }
-        if (res.statusCode < 200 || res.statusCode >= 300) {
-          return callback(new Error(`failed to move ${type} ${res.statusCode}`))
-        }
-
-        callback()
-      }
-    )
+    owner.moveItemInProject(projectId, type, itemId, folderId, callback)
   }
 
   function renameItem(owner, projectId, type, itemId, name, callback) {
-    owner.request.post(
-      {
-        uri: `project/${projectId}/${type}/${itemId}/rename`,
-        json: {
-          name: name
-        }
-      },
-      (error, res) => {
-        if (error) {
-          return callback(error)
-        }
-        if (res.statusCode < 200 || res.statusCode >= 300) {
-          return callback(
-            new Error(`failed to rename ${type} ${res.statusCode}`)
-          )
-        }
-
-        callback()
-      }
-    )
+    owner.renameItemInProject(projectId, type, itemId, name, callback)
   }
 
   function deleteItem(owner, projectId, type, itemId, callback) {
-    owner.request.delete(
-      {
-        uri: `project/${projectId}/${type}/${itemId}`
-      },
-      (error, res) => {
-        if (error) {
-          return callback(error)
-        }
-        if (res.statusCode < 200 || res.statusCode >= 300) {
-          return callback(
-            new Error(`failed to delete folder ${res.statusCode}`)
-          )
-        }
-        callback()
-      }
-    )
+    owner.deleteItemInProject(projectId, type, itemId, callback)
   }
 
   function verifyVersionIncremented(
@@ -260,7 +187,6 @@ describe('ProjectStructureChanges', function() {
     let exampleProjectId
 
     beforeEach(function(done) {
-      MockDocUpdaterApi.clearProjectStructureUpdates()
       createExampleProject(owner, (err, projectId) => {
         exampleProjectId = projectId
         done(err)
@@ -293,7 +219,6 @@ describe('ProjectStructureChanges', function() {
     let dupProjectId
 
     beforeEach(function(done) {
-      MockDocUpdaterApi.clearProjectStructureUpdates()
       createExampleProject(owner, (err, projectId) => {
         if (err) {
           return done(err)
@@ -350,7 +275,7 @@ describe('ProjectStructureChanges', function() {
           return done(err)
         }
         exampleProjectId = projectId
-        MockDocUpdaterApi.clearProjectStructureUpdates()
+        MockDocUpdaterApi.reset()
 
         ProjectGetter.getProject(projectId, (error, project) => {
           if (error) {
@@ -634,7 +559,7 @@ describe('ProjectStructureChanges', function() {
         }
         exampleProjectId = projectId
         rootFolderId = folderId
-        MockDocUpdaterApi.clearProjectStructureUpdates()
+        MockDocUpdaterApi.reset()
         ProjectGetter.getProject(projectId, (error, project) => {
           if (error) {
             throw error
@@ -663,7 +588,7 @@ describe('ProjectStructureChanges', function() {
     })
 
     it('should version a replacement file', function(done) {
-      MockDocUpdaterApi.clearProjectStructureUpdates()
+      MockDocUpdaterApi.reset()
 
       uploadFile(
         owner,
@@ -734,7 +659,7 @@ describe('ProjectStructureChanges', function() {
                   throw error
                 }
                 oldVersion = project.version
-                MockDocUpdaterApi.clearProjectStructureUpdates()
+                MockDocUpdaterApi.reset()
                 done()
               })
             })
@@ -813,7 +738,7 @@ describe('ProjectStructureChanges', function() {
         exampleDocId,
         exampleFolderId,
         () => {
-          MockDocUpdaterApi.clearProjectStructureUpdates()
+          MockDocUpdaterApi.reset()
 
           owner.request.post(
             {
@@ -895,7 +820,7 @@ describe('ProjectStructureChanges', function() {
               exampleFolderId = folderId
               moveItem(owner, projectId, 'doc', docId, folderId, () => {
                 moveItem(owner, projectId, 'file', fileId, folderId, () => {
-                  MockDocUpdaterApi.clearProjectStructureUpdates()
+                  MockDocUpdaterApi.reset()
                   ProjectGetter.getProject(
                     exampleProjectId,
                     (error, project) => {
@@ -1032,7 +957,7 @@ describe('ProjectStructureChanges', function() {
               }
               moveItem(owner, projectId, 'doc', docId, folderId, () => {
                 moveItem(owner, projectId, 'file', fileId, folderId, () => {
-                  MockDocUpdaterApi.clearProjectStructureUpdates()
+                  MockDocUpdaterApi.reset()
                   ProjectGetter.getProject(
                     exampleProjectId,
                     (error, project) => {
@@ -1089,7 +1014,7 @@ describe('ProjectStructureChanges', function() {
               return done(err)
             }
             this.exampleDocId = docId
-            MockDocUpdaterApi.clearProjectStructureUpdates()
+            MockDocUpdaterApi.reset()
             ProjectGetter.getProject(
               this.exampleProjectId,
               (error, project) => {
@@ -1107,7 +1032,7 @@ describe('ProjectStructureChanges', function() {
 
     describe('when rootDoc_id matches doc being deleted', function() {
       beforeEach(function(done) {
-        Project.update(
+        Project.updateOne(
           { _id: this.exampleProjectId },
           { $set: { rootDoc_id: this.exampleDocId } },
           done
@@ -1139,7 +1064,7 @@ describe('ProjectStructureChanges', function() {
     describe('when rootDoc_id does not match doc being deleted', function() {
       beforeEach(function(done) {
         this.exampleRootDocId = new ObjectId()
-        Project.update(
+        Project.updateOne(
           { _id: this.exampleProjectId },
           { $set: { rootDoc_id: this.exampleRootDocId } },
           done
@@ -1186,7 +1111,7 @@ describe('ProjectStructureChanges', function() {
             if (error) {
               throw error
             }
-            MockDocUpdaterApi.clearProjectStructureUpdates()
+            MockDocUpdaterApi.reset()
             rootFolderId = project.rootFolder[0]._id.toString()
             oldVersion = project.version
             done()
@@ -1291,7 +1216,7 @@ describe('ProjectStructureChanges', function() {
               if (error) {
                 throw error
               }
-              MockDocUpdaterApi.clearProjectStructureUpdates()
+              MockDocUpdaterApi.reset()
               oldVersion = project.version
               done()
             })
@@ -1403,7 +1328,7 @@ describe('ProjectStructureChanges', function() {
         }
         exampleProjectId = projectId
         rootFolderId = folderId
-        MockDocUpdaterApi.clearProjectStructureUpdates()
+        MockDocUpdaterApi.reset()
         done()
       })
     })

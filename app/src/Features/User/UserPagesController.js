@@ -1,6 +1,6 @@
 const UserGetter = require('./UserGetter')
+const OError = require('@overleaf/o-error')
 const UserSessionsManager = require('./UserSessionsManager')
-const ErrorController = require('../Errors/ErrorController')
 const logger = require('logger-sharelatex')
 const Settings = require('settings-sharelatex')
 const AuthenticationController = require('../Authentication/AuthenticationController')
@@ -25,44 +25,6 @@ const UserPagesController = {
       new_email: req.query.new_email || '',
       samlBeta: req.session.samlBeta
     })
-  },
-
-  activateAccountPage(req, res, next) {
-    // An 'activation' is actually just a password reset on an account that
-    // was set with a random password originally.
-    if (req.query.user_id == null || req.query.token == null) {
-      return ErrorController.notFound(req, res)
-    }
-
-    if (typeof req.query.user_id !== 'string') {
-      return ErrorController.forbidden(req, res)
-    }
-
-    UserGetter.getUser(
-      req.query.user_id,
-      { email: 1, loginCount: 1 },
-      (error, user) => {
-        if (error != null) {
-          return next(error)
-        }
-        if (!user) {
-          return ErrorController.notFound(req, res)
-        }
-        if (user.loginCount > 0) {
-          // Already seen this user, so account must be activate
-          // This lets users keep clicking the 'activate' link in their email
-          // as a way to log in which, if I know our users, they will.
-          res.redirect(`/login`)
-        } else {
-          req.session.doLoginAfterPasswordReset = true
-          res.render('user/activate', {
-            title: 'activate_account',
-            email: user.email,
-            token: req.query.token
-          })
-        }
-      }
-    )
   },
 
   loginPage(req, res) {
@@ -104,6 +66,7 @@ const UserPagesController = {
 
   settingsPage(req, res, next) {
     const userId = AuthenticationController.getLoggedInUserId(req)
+    const reconfirmationRemoveEmail = req.query.remove
     // SSO
     const ssoError = req.session.ssoError
     if (ssoError) {
@@ -120,10 +83,7 @@ const UserPagesController = {
         institutionLinked
       )
     }
-    const institutionLinkedToAnother = _.get(req.session, [
-      'saml',
-      'linkedToAnother'
-    ])
+    const samlError = _.get(req.session, ['saml', 'error'])
     const institutionEmailNonCanonical = _.get(req.session, [
       'saml',
       'emailNonCanonical'
@@ -132,7 +92,8 @@ const UserPagesController = {
       'saml',
       'requestedEmail'
     ])
-    const institutionLinkingError = _.get(req.session, ['saml', 'error'])
+
+    const reconfirmedViaSAML = _.get(req.session, ['saml', 'reconfirmed'])
     delete req.session.saml
     let shouldAllowEditingDetails = true
     if (Settings.ldap && Settings.ldap.updateUserDetailsOnLogin) {
@@ -160,12 +121,13 @@ const UserPagesController = {
         ),
         oauthUseV2: Settings.oauthUseV2 || false,
         institutionLinked,
-        institutionLinkedToAnother,
+        samlError,
         institutionEmailNonCanonical:
           institutionEmailNonCanonical && institutionRequestedEmail
             ? institutionEmailNonCanonical
             : undefined,
-        institutionLinkingError,
+        reconfirmedViaSAML,
+        reconfirmationRemoveEmail,
         samlBeta: req.session.samlBeta,
         ssoError: ssoError,
         thirdPartyIds: UserPagesController._restructureThirdPartyIds(user)
@@ -181,7 +143,9 @@ const UserPagesController = {
       [req.sessionID],
       (err, sessions) => {
         if (err != null) {
-          logger.warn({ userId: user._id }, 'error getting all user sessions')
+          OError.tag(err, 'error getting all user sessions', {
+            userId: user._id
+          })
           return next(err)
         }
         res.render('user/sessions', {

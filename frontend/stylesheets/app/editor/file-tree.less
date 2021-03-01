@@ -8,21 +8,34 @@
   }
 }
 
+.editor-sidebar {
+  display: flex;
+  flex-direction: column;
+  background-color: @file-tree-bg;
+}
+
 .file-tree {
+  display: flex !important; // To work around jQuery layout's inline styles
+  flex-direction: column;
+  flex-grow: 1;
+  max-height: 100%;
+
   .toolbar.toolbar-filetree {
     .toolbar-small-mixin;
     .toolbar-alt-mixin;
     padding: 0 5px;
+    flex-shrink: 0;
   }
 
+  > file-tree-root,
   .file-tree-inner {
-    position: absolute;
-    top: 32px;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
     overflow-y: auto;
-    background-color: @file-tree-bg;
+    width: inherit;
+    height: inherit;
 
     &.no-toolbar {
       top: 0;
@@ -54,6 +67,7 @@
     }
   }
 
+  li.dnd-droppable-hover .entity-name,
   li .entity-name.droppable-hover {
     font-weight: bold;
     background-color: @file-tree-item-hover-bg;
@@ -73,19 +87,47 @@
     margin: 0;
     overflow-x: hidden;
     height: 100%;
+    flex-grow: 1;
     position: relative;
     overflow-y: auto;
 
-    ul {
+    .entity > ul,
+    ul[role='tree'] {
       margin-left: (@line-height-computed / 2);
+    }
+
+    li.bottom-buffer {
+      min-height: @line-height-computed;
     }
 
     li {
       line-height: @file-tree-line-height;
       position: relative;
+      &:focus {
+        outline: none;
+      }
 
       .entity {
         user-select: none;
+        &:focus {
+          outline: none;
+        }
+      }
+
+      .entity > .entity-name > button {
+        background-color: transparent;
+        border: 0;
+        padding: 0;
+        &:focus {
+          outline: none;
+        }
+        &.item-name-button {
+          width: 100%;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          text-align: left;
+          padding-right: 32px;
+        }
       }
 
       .entity-name {
@@ -94,6 +136,12 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        &.entity-name-react {
+          text-overflow: clip;
+        }
+        &:focus {
+          outline: none;
+        }
         &:hover {
           background-color: @file-tree-item-hover-bg;
         }
@@ -106,6 +154,17 @@
         }
         input {
           line-height: 1.6;
+        }
+        .dropdown-toggle > i {
+          color: white;
+          font-size: 18px;
+        }
+      }
+
+      .entity.dnd-draggable-dragging {
+        .entity-name:hover {
+          background-color: transparent;
+          .fake-full-width-bg(transparent);
         }
       }
 
@@ -129,17 +188,41 @@
         font-size: 14px;
       }
 
+      i.spaced {
+        margin-left: 18px;
+      }
+
       i.toggle {
         width: 24px;
         padding: 6px;
-        font-size: 0.7rem;
+        font-size: 16px;
         color: @file-tree-item-toggle-color;
+      }
+
+      .file-tree-dropdown-toggle {
+        display: flex;
+        align-items: center;
+        color: #fff;
+        line-height: 1.6;
+        font-size: 20px;
+        padding: 0 4px 0 18px;
+
+        &:hover,
+        &:focus {
+          text-decoration: none;
+        }
+        &::before {
+          content: '\00B7\00B7\00B7';
+          transform: rotate(90deg);
+          letter-spacing: 0.5px;
+        }
       }
 
       &.multi-selected {
         > .entity {
           > .entity-name {
             > div > i.fa,
+            > button > i.fa,
             > i.fa,
             .entity-menu-toggle i.fa {
               color: #fff;
@@ -162,9 +245,6 @@
       .dropdown {
         position: absolute;
         right: 0;
-        > a {
-          padding: 0 12px;
-        }
       }
 
       .rename-input {
@@ -184,6 +264,24 @@
           display: none;
         }
       }
+
+      .entity-limit-hit {
+        color: @file-tree-item-color;
+        line-height: 2.05;
+        margin-left: (@line-height-computed / 2);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .entity-limit-hit-message {
+        font-style: italic;
+      }
+
+      i.fa.entity-limit-hit-tooltip-trigger {
+        margin-left: (@line-height-computed / 4);
+        cursor: pointer;
+      }
     }
   }
 
@@ -193,6 +291,7 @@
         > .entity-name {
           color: @file-tree-item-selected-color;
           > div > i.fa,
+          > button > i.fa,
           > i.fa,
           .entity-menu-toggle i.fa {
             color: @file-tree-item-selected-color;
@@ -206,18 +305,59 @@
           .fake-full-width-bg(@file-tree-item-selected-bg);
 
           .entity-menu-toggle {
-            display: inline;
+            display: inline-block;
           }
+        }
+      }
+    }
+    ul.file-tree-list li.selected.dnd-droppable-hover {
+      > .entity {
+        > .entity-name {
+          background-color: @file-tree-item-hover-bg;
+          .fake-full-width-bg(@file-tree-item-hover-bg);
         }
       }
     }
   }
 
+  .dnd-draggable-preview-layer {
+    position: absolute;
+    pointer-events: none;
+    z-index: 100;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+
+    &.dnd-droppable-hover {
+      border: 3px solid @file-tree-item-selected-bg;
+    }
+  }
+
+  .dnd-draggable-preview-item,
   .ui-draggable-dragging {
     background-color: fade(@file-tree-item-selected-bg, 60%);
     color: @file-tree-item-selected-color;
     width: 75%;
     padding-left: @line-height-computed;
+  }
+
+  .dnd-draggable-preview-item {
+    line-height: @file-tree-line-height;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .disconnected-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    background: @file-tree-bg;
+    opacity: 0.5;
+    cursor: wait;
   }
 }
 
@@ -255,6 +395,17 @@
       background-color: white;
     }
   }
+}
+
+.file-tree-error {
+  text-align: center;
+  color: @file-tree-error-color;
+  padding: 20px;
+}
+
+.file-tree-modal-alert {
+  margin-top: 10px;
+  margin-bottom: 0px;
 }
 
 .modal-new-file--body {

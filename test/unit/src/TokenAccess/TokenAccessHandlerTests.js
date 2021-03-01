@@ -1,5 +1,5 @@
 /* eslint-disable
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
     no-return-assign,
     no-unused-vars,
@@ -21,7 +21,7 @@ const modulePath = path.join(
   '../../../../app/src/Features/TokenAccess/TokenAccessHandler'
 )
 const { expect } = require('chai')
-const { ObjectId } = require('mongojs')
+const { ObjectId } = require('mongodb')
 
 describe('TokenAccessHandler', function() {
   beforeEach(function() {
@@ -39,9 +39,10 @@ describe('TokenAccessHandler', function() {
         console: console
       },
       requires: {
+        mongodb: { ObjectId },
         '../../models/Project': { Project: (this.Project = {}) },
+        'logger-sharelatex': { err: sinon.stub() },
         'settings-sharelatex': (this.settings = {}),
-        '../Collaborators/CollaboratorsGetter': (this.CollaboratorsGetter = {}),
         '../User/UserGetter': (this.UserGetter = {}),
         '../V1/V1Api': (this.V1Api = {
           request: sinon.stub()
@@ -122,22 +123,22 @@ describe('TokenAccessHandler', function() {
 
   describe('addReadOnlyUserToProject', function() {
     beforeEach(function() {
-      return (this.Project.update = sinon.stub().callsArgWith(2, null))
+      return (this.Project.updateOne = sinon.stub().callsArgWith(2, null))
     })
 
-    it('should call Project.update', function(done) {
+    it('should call Project.updateOne', function(done) {
       return this.TokenAccessHandler.addReadOnlyUserToProject(
         this.userId,
         this.projectId,
         err => {
-          expect(this.Project.update.callCount).to.equal(1)
+          expect(this.Project.updateOne.callCount).to.equal(1)
           expect(
-            this.Project.update.calledWith({
+            this.Project.updateOne.calledWith({
               _id: this.projectId
             })
           ).to.equal(true)
           expect(
-            this.Project.update.lastCall.args[1]['$addToSet']
+            this.Project.updateOne.lastCall.args[1].$addToSet
           ).to.have.keys('tokenAccessReadOnly_refs')
           return done()
         }
@@ -155,9 +156,9 @@ describe('TokenAccessHandler', function() {
       )
     })
 
-    describe('when Project.update produces an error', function() {
+    describe('when Project.updateOne produces an error', function() {
       beforeEach(function() {
-        return (this.Project.update = sinon
+        return (this.Project.updateOne = sinon
           .stub()
           .callsArgWith(2, new Error('woops')))
       })
@@ -177,22 +178,22 @@ describe('TokenAccessHandler', function() {
 
   describe('addReadAndWriteUserToProject', function() {
     beforeEach(function() {
-      return (this.Project.update = sinon.stub().callsArgWith(2, null))
+      return (this.Project.updateOne = sinon.stub().callsArgWith(2, null))
     })
 
-    it('should call Project.update', function(done) {
+    it('should call Project.updateOne', function(done) {
       return this.TokenAccessHandler.addReadAndWriteUserToProject(
         this.userId,
         this.projectId,
         err => {
-          expect(this.Project.update.callCount).to.equal(1)
+          expect(this.Project.updateOne.callCount).to.equal(1)
           expect(
-            this.Project.update.calledWith({
+            this.Project.updateOne.calledWith({
               _id: this.projectId
             })
           ).to.equal(true)
           expect(
-            this.Project.update.lastCall.args[1]['$addToSet']
+            this.Project.updateOne.lastCall.args[1].$addToSet
           ).to.have.keys('tokenAccessReadAndWrite_refs')
           return done()
         }
@@ -210,9 +211,9 @@ describe('TokenAccessHandler', function() {
       )
     })
 
-    describe('when Project.update produces an error', function() {
+    describe('when Project.updateOne produces an error', function() {
       beforeEach(function() {
-        return (this.Project.update = sinon
+        return (this.Project.updateOne = sinon
           .stub()
           .callsArgWith(2, new Error('woops')))
       })
@@ -688,9 +689,7 @@ describe('TokenAccessHandler', function() {
         it('should return response body', function() {
           expect(
             this.V1Api.request.calledWith({
-              url: `/api/v1/sharelatex/users/${this.v1UserId}/docs/${
-                this.token
-              }/info`
+              url: `/api/v1/sharelatex/users/${this.v1UserId}/docs/${this.token}/info`
             })
           ).to.equal(true)
           return expect(this.callback.calledWith(null, 'mock-data')).to.equal(

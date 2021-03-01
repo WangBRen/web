@@ -1,10 +1,12 @@
 const request = require('./request')
 const settings = require('settings-sharelatex')
-const { db, ObjectId } = require('../../../../app/src/infrastructure/mongojs')
+const { db, ObjectId } = require('../../../../app/src/infrastructure/mongodb')
 const UserModel = require('../../../../app/src/models/User').User
 const UserUpdater = require('../../../../app/src/Features/User/UserUpdater')
 const AuthenticationManager = require('../../../../app/src/Features/Authentication/AuthenticationManager')
 const { promisify } = require('util')
+const fs = require('fs')
+const Path = require('path')
 
 let count = 0
 
@@ -20,7 +22,7 @@ class User {
       }
     ]
     this.email = this.emails[0].email
-    this.password = `acceptance-test-${count}-password`
+    this.password = `a-terrible-secret-${count}`
     count++
     this.jar = request.jar()
     this.request = request.defaults({
@@ -43,7 +45,7 @@ class User {
   }
 
   mongoUpdate(updateOp, callback) {
-    db.users.update({ _id: ObjectId(this._id) }, updateOp, callback)
+    db.users.updateOne({ _id: ObjectId(this._id) }, updateOp, callback)
   }
 
   register(callback) {
@@ -110,26 +112,18 @@ class User {
       if (error != null) {
         return callback(error)
       }
-      AuthenticationManager.setUserPasswordInV2(
-        user._id,
-        this.password,
-        error => {
+      this.setExtraAttributes(user)
+      AuthenticationManager.setUserPasswordInV2(user, this.password, error => {
+        if (error != null) {
+          return callback(error)
+        }
+        this.mongoUpdate({ $set: { emails: this.emails } }, error => {
           if (error != null) {
             return callback(error)
           }
-          UserUpdater.updateUser(
-            user._id,
-            { $set: { emails: this.emails } },
-            error => {
-              if (error != null) {
-                return callback(error)
-              }
-              this.setExtraAttributes(user)
-              callback(null, this.password)
-            }
-          )
-        }
-      )
+          callback(null, this.password)
+        })
+      })
     })
   }
 
@@ -139,16 +133,20 @@ class User {
       const value = features[key]
       update[`features.${key}`] = value
     }
-    UserModel.update({ _id: this.id }, update, callback)
+    UserModel.updateOne({ _id: this.id }, update, callback)
   }
 
   setFeaturesOverride(featuresOverride, callback) {
     const update = { $push: { featuresOverrides: featuresOverride } }
-    UserModel.update({ _id: this.id }, update, callback)
+    UserModel.updateOne({ _id: this.id }, update, callback)
   }
 
   setOverleafId(overleafId, callback) {
-    UserModel.update({ _id: this.id }, { 'overleaf.id': overleafId }, callback)
+    UserModel.updateOne(
+      { _id: this.id },
+      { 'overleaf.id': overleafId },
+      callback
+    )
   }
 
   logout(callback) {
@@ -186,7 +184,13 @@ class User {
 
   addEmail(email, callback) {
     this.emails.push({ email, createdAt: new Date() })
-    UserUpdater.addEmailAddress(this.id, email, callback)
+    UserUpdater.addEmailAddress(
+      this.id,
+      email,
+      {},
+      { initiatorId: this._id, ipAddress: '127:0:0:0' },
+      callback
+    )
   }
 
   confirmEmail(email, callback) {
@@ -200,17 +204,13 @@ class User {
   }
 
   ensureAdmin(callback) {
-    db.users.update(
-      { _id: ObjectId(this.id) },
-      { $set: { isAdmin: true } },
-      callback
-    )
+    this.mongoUpdate({ $set: { isAdmin: true } }, callback)
   }
 
   ensureStaffAccess(flag, callback) {
     const update = { $set: {} }
     update.$set[`staffAccess.${flag}`] = true
-    db.users.update({ _id: ObjectId(this.id) }, update, callback)
+    this.mongoUpdate(update, callback)
   }
 
   upgradeFeatures(callback) {
@@ -225,11 +225,7 @@ class User {
       trackChanges: true,
       trackChangesVisible: true
     }
-    db.users.update(
-      { _id: ObjectId(this.id) },
-      { $set: { features } },
-      callback
-    )
+    this.mongoUpdate({ $set: { features } }, callback)
   }
 
   downgradeFeatures(callback) {
@@ -244,26 +240,18 @@ class User {
       trackChanges: false,
       trackChangesVisible: false
     }
-    db.users.update(
-      { _id: ObjectId(this.id) },
-      { $set: { features } },
-      callback
-    )
+    this.mongoUpdate({ $set: { features } }, callback)
   }
 
   defaultFeatures(callback) {
     const features = settings.defaultFeatures
-    db.users.update(
-      { _id: ObjectId(this.id) },
-      { $set: { features } },
-      callback
-    )
+    this.mongoUpdate({ $set: { features } }, callback)
   }
 
   getFeatures(callback) {
     db.users.findOne(
       { _id: ObjectId(this.id) },
-      { features: 1 },
+      { projection: { features: 1 } },
       (error, user) => callback(error, user && user.features)
     )
   }
@@ -277,16 +265,12 @@ class User {
         return callback()
       }
       const userId = user._id
-      db.projects.remove(
-        { owner_ref: ObjectId(userId) },
-        { multi: true },
-        err => {
-          if (err != null) {
-            callback(err)
-          }
-          db.users.remove({ _id: ObjectId(userId) }, callback)
+      db.projects.deleteMany({ owner_ref: ObjectId(userId) }, err => {
+        if (err != null) {
+          callback(err)
         }
-      )
+        db.users.deleteOne({ _id: ObjectId(userId) }, callback)
+      })
     })
   }
 
@@ -321,7 +305,7 @@ class User {
   }
 
   saveProject(project, callback) {
-    db.projects.update({ _id: project._id }, project, callback)
+    db.projects.updateOne({ _id: project._id }, { $set: project }, callback)
   }
 
   createProject(name, options, callback) {
@@ -346,7 +330,7 @@ class User {
               name,
               options,
               response.statusCode,
-              response.headers['location'],
+              response.headers.location,
               body
             ])
           )
@@ -373,9 +357,7 @@ class User {
   }
 
   deleteProjects(callback) {
-    db.projects.remove({ owner_ref: ObjectId(this.id) }, { multi: true }, err =>
-      callback(err)
-    )
+    db.projects.deleteMany({ owner_ref: ObjectId(this.id) }, callback)
   }
 
   openProject(projectId, callback) {
@@ -421,6 +403,139 @@ class User {
     })
   }
 
+  uploadFileInProject(projectId, folderId, file, name, contentType, callback) {
+    const imageFile = fs.createReadStream(
+      Path.resolve(Path.join(__dirname, '..', '..', 'files', file))
+    )
+
+    this.request.post(
+      {
+        uri: `project/${projectId}/upload`,
+        qs: {
+          folder_id: String(folderId)
+        },
+        formData: {
+          qqfile: {
+            value: imageFile,
+            options: {
+              filename: name,
+              contentType: contentType
+            }
+          }
+        }
+      },
+      (error, res, body) => {
+        if (error) {
+          return callback(error)
+        }
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          return callback(new Error(`failed to upload file ${res.statusCode}`))
+        }
+
+        callback(null, JSON.parse(body).entity_id)
+      }
+    )
+  }
+
+  uploadExampleFileInProject(projectId, folderId, name, callback) {
+    this.uploadFileInProject(
+      projectId,
+      folderId,
+      '1pixel.png',
+      name,
+      'image/png',
+      callback
+    )
+  }
+
+  moveItemInProject(projectId, type, itemId, folderId, callback) {
+    this.request.post(
+      {
+        uri: `project/${projectId}/${type}/${itemId}/move`,
+        json: {
+          folder_id: folderId
+        }
+      },
+      (error, res) => {
+        if (error) {
+          return callback(error)
+        }
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          return callback(new Error(`failed to move ${type} ${res.statusCode}`))
+        }
+
+        callback()
+      }
+    )
+  }
+
+  renameItemInProject(projectId, type, itemId, name, callback) {
+    this.request.post(
+      {
+        uri: `project/${projectId}/${type}/${itemId}/rename`,
+        json: {
+          name: name
+        }
+      },
+      (error, res) => {
+        if (error) {
+          return callback(error)
+        }
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          return callback(
+            new Error(`failed to rename ${type} ${res.statusCode}`)
+          )
+        }
+
+        callback()
+      }
+    )
+  }
+
+  deleteItemInProject(projectId, type, itemId, callback) {
+    this.request.delete(
+      `project/${projectId}/${type}/${itemId}`,
+      (error, res) => {
+        if (error) {
+          return callback(error)
+        }
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          return callback(
+            new Error(`failed to delete ${type} ${res.statusCode}`)
+          )
+        }
+        callback()
+      }
+    )
+  }
+
+  joinProject(projectId, callback) {
+    this.request.post(
+      {
+        url: `/project/${projectId}/join`,
+        qs: { user_id: this._id },
+        auth: {
+          user: settings.apis.web.user,
+          pass: settings.apis.web.pass,
+          sendImmediately: true
+        },
+        json: true,
+        jar: false
+      },
+      (error, res, body) => {
+        if (error) {
+          return callback(error)
+        }
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          return callback(
+            new Error(`failed to join project ${projectId} ${res.statusCode}`)
+          )
+        }
+        callback(null, body)
+      }
+    )
+  }
+
   addUserToProject(projectId, user, privileges, callback) {
     let updateOp
     if (privileges === 'readAndWrite') {
@@ -428,9 +543,7 @@ class User {
     } else if (privileges === 'readOnly') {
       updateOp = { $addToSet: { readOnly_refs: user._id } }
     }
-    db.projects.update({ _id: db.ObjectId(projectId) }, updateOp, err =>
-      callback(err)
-    )
+    db.projects.updateOne({ _id: ObjectId(projectId) }, updateOp, callback)
   }
 
   makePublic(projectId, level, callback) {
@@ -518,17 +631,7 @@ class User {
             newPassword2: this.password
           }
         },
-        (error, response, body) => {
-          if (error != null) {
-            return callback(error)
-          }
-          db.users.findOne({ email: this.email }, (error, user) => {
-            if (error != null) {
-              return callback(error)
-            }
-            callback()
-          })
-        }
+        callback
       )
     })
   }
@@ -567,23 +670,6 @@ class User {
           }
           callback(null, response.statusCode)
         }
-      )
-    })
-  }
-
-  activateSudoMode(callback) {
-    this.getCsrfToken(error => {
-      if (error != null) {
-        return callback(error)
-      }
-      this.request.post(
-        {
-          uri: '/confirm-password',
-          json: {
-            password: this.password
-          }
-        },
-        callback
       )
     })
   }
@@ -634,9 +720,7 @@ class User {
       } else {
         callback(
           new Error(
-            `unexpected status code from /user/personal_info: ${
-              response.statusCode
-            }`
+            `unexpected status code from /user/personal_info: ${response.statusCode}`
           )
         )
       }
@@ -671,7 +755,7 @@ class User {
   }
 
   setV1Id(v1Id, callback) {
-    UserModel.update(
+    UserModel.updateOne(
       {
         _id: this._id
       },

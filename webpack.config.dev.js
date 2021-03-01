@@ -6,8 +6,8 @@ const base = require('./webpack.config')
 module.exports = merge(base, {
   mode: 'development',
 
-  // Enable source maps for dev (fast compilation, slow runtime)
-  devtool: 'cheap-module-eval-source-map',
+  // Enable accurate source maps for dev
+  devtool: 'eval-source-map',
 
   plugins: [
     // Extract CSS to a separate file (rather than inlining to a <style> tag)
@@ -18,12 +18,10 @@ module.exports = merge(base, {
   ],
 
   devServer: {
-    // Disable webpack dev server auto-reload
-    inline: false,
-
-    // Expose dev server as localhost with dev box
+    // Expose dev server at www.dev-overleaf.com
     host: '0.0.0.0',
     port: 3808,
+    public: 'www.dev-overleaf.com:443',
 
     // Customise output to the (node) console
     stats: {

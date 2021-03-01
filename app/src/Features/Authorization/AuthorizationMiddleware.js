@@ -2,9 +2,9 @@ let AuthorizationMiddleware
 const AuthorizationManager = require('./AuthorizationManager')
 const async = require('async')
 const logger = require('logger-sharelatex')
-const { ObjectId } = require('mongojs')
+const { ObjectId } = require('mongodb')
 const Errors = require('../Errors/Errors')
-const HttpErrors = require('@overleaf/o-error/http')
+const HttpErrorHandler = require('../Errors/HttpErrorHandler')
 const AuthenticationController = require('../Authentication/AuthenticationController')
 const TokenAccessHandler = require('../TokenAccess/TokenAccessHandler')
 
@@ -99,11 +99,7 @@ module.exports = AuthorizationMiddleware = {
             { userId, projectId },
             'denying user read access to project'
           )
-          const acceptHeader = req.headers && req.headers['accept']
-          if (acceptHeader && acceptHeader.match(/^application\/json.*$/)) {
-            return res.sendStatus(403)
-          }
-          AuthorizationMiddleware.redirectToRestricted(req, res, next)
+          HttpErrorHandler.forbidden(req, res)
         }
       )
     })
@@ -138,7 +134,7 @@ module.exports = AuthorizationMiddleware = {
             { userId, projectId },
             'denying user write access to project settings'
           )
-          AuthorizationMiddleware.redirectToRestricted(req, res, next)
+          HttpErrorHandler.forbidden(req, res)
         }
       )
     })
@@ -173,7 +169,7 @@ module.exports = AuthorizationMiddleware = {
             { userId, projectId },
             'denying user write access to project settings'
           )
-          AuthorizationMiddleware.redirectToRestricted(req, res, next)
+          HttpErrorHandler.forbidden(req, res)
         }
       )
     })
@@ -208,7 +204,7 @@ module.exports = AuthorizationMiddleware = {
             { userId, projectId },
             'denying user admin access to project'
           )
-          next(new HttpErrors.ForbiddenError({}))
+          HttpErrorHandler.forbidden(req, res)
         }
       )
     })

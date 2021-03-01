@@ -1,5 +1,5 @@
 /* eslint-disable
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
     no-return-assign,
     no-unused-vars,
@@ -17,14 +17,20 @@ const async = require('async')
 const UserClient = require('./helpers/User')
 const request = require('./helpers/request')
 const settings = require('settings-sharelatex')
-const { ObjectId } = require('../../../app/src/infrastructure/mongojs')
+const { ObjectId } = require('mongodb')
 const { Subscription } = require('../../../app/src/models/Subscription')
 const { User } = require('../../../app/src/models/User')
 const FeaturesUpdater = require('../../../app/src/Features/Subscription/FeaturesUpdater')
 
-const MockV1Api = require('./helpers/MockV1Api')
+const MockV1ApiClass = require('./mocks/MockV1Api')
 const logger = require('logger-sharelatex')
 logger.logger.level('error')
+
+let MockV1Api
+
+before(function() {
+  MockV1Api = MockV1ApiClass.instance()
+})
 
 const syncUserAndGetFeatures = function(user, callback) {
   if (callback == null) {
@@ -121,7 +127,7 @@ describe('FeatureUpdater.refreshFeatures', function() {
 
   describe('when the user has bonus features', function() {
     beforeEach(function() {
-      return User.update(
+      return User.updateOne(
         {
           _id: this.user._id
         },
@@ -162,7 +168,7 @@ describe('FeatureUpdater.refreshFeatures', function() {
     })
 
     it('should not set their features if email is not confirmed', function(done) {
-      MockV1Api.setAffiliations([this.affiliationData])
+      MockV1Api.setAffiliations(this.user._id, [this.affiliationData])
       return syncUserAndGetFeatures(this.user, (error, features) => {
         expect(features).to.deep.equal(settings.defaultFeatures)
         return done()
@@ -170,7 +176,7 @@ describe('FeatureUpdater.refreshFeatures', function() {
     })
 
     it('should set their features if email is confirmed', function(done) {
-      MockV1Api.setAffiliations([this.affiliationData])
+      MockV1Api.setAffiliations(this.user._id, [this.affiliationData])
       return this.user.confirmEmail(this.email, error => {
         return syncUserAndGetFeatures(this.user, (error, features) => {
           expect(features).to.deep.equal(this.institutionPlan.features)
@@ -181,7 +187,7 @@ describe('FeatureUpdater.refreshFeatures', function() {
 
     it('should not set their features if institution is not confirmed', function(done) {
       this.affiliationData.institution.confirmed = false
-      MockV1Api.setAffiliations([this.affiliationData])
+      MockV1Api.setAffiliations(this.user._id, [this.affiliationData])
       return this.user.confirmEmail(this.email, error => {
         return syncUserAndGetFeatures(this.user, (error, features) => {
           expect(features).to.deep.equal(settings.defaultFeatures)
@@ -193,7 +199,7 @@ describe('FeatureUpdater.refreshFeatures', function() {
 
   describe('when the user is due bonus features and has extra features that no longer apply', function() {
     beforeEach(function() {
-      return User.update(
+      return User.updateOne(
         {
           _id: this.user._id
         },
@@ -224,7 +230,7 @@ describe('FeatureUpdater.refreshFeatures', function() {
   describe('when the user has a v1 plan', function() {
     beforeEach(function() {
       MockV1Api.setUser(42, { plan_name: 'free' })
-      return User.update(
+      return User.updateOne(
         {
           _id: this.user._id
         },
@@ -251,7 +257,7 @@ describe('FeatureUpdater.refreshFeatures', function() {
   describe('when the user has a v1 plan and bonus features', function() {
     beforeEach(function() {
       MockV1Api.setUser(42, { plan_name: 'free' })
-      return User.update(
+      return User.updateOne(
         {
           _id: this.user._id
         },
@@ -327,7 +333,7 @@ describe('FeatureUpdater.refreshFeatures', function() {
 
   describe('when the notifyV1Flag is passed', function() {
     beforeEach(function() {
-      return User.update(
+      return User.updateOne(
         {
           _id: this.user._id
         },
@@ -344,7 +350,7 @@ describe('FeatureUpdater.refreshFeatures', function() {
     beforeEach(function() {
       const futureDate = new Date()
       futureDate.setDate(futureDate.getDate() + 1)
-      return User.update(
+      return User.updateOne(
         {
           _id: this.user._id
         },

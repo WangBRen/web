@@ -1,6 +1,6 @@
 /* eslint-disable
     camelcase,
-    handle-callback-err,
+    node/handle-callback-err,
     max-len,
     no-unused-vars,
 */
@@ -16,7 +16,6 @@ const { promisify } = require('util')
 const { Subscription } = require('../../models/Subscription')
 const { DeletedSubscription } = require('../../models/DeletedSubscription')
 const logger = require('logger-sharelatex')
-const { ObjectId } = require('mongoose').Types
 require('./GroupPlansData') // make sure dynamic group plans are loaded
 
 const SubscriptionLocator = {
@@ -40,10 +39,6 @@ const SubscriptionLocator = {
         return callback(err, subscription)
       }
     )
-  },
-
-  findManagedSubscription(managerId, callback) {
-    return Subscription.findOne({ manager_ids: managerId }, callback)
   },
 
   getManagedGroupSubscriptions(user_or_id, callback) {
@@ -120,9 +115,6 @@ SubscriptionLocator.promises = {
   getUsersSubscription: promisify(SubscriptionLocator.getUsersSubscription),
   getUserIndividualSubscription: promisify(
     SubscriptionLocator.getUserIndividualSubscription
-  ),
-  findManagedSubscription: promisify(
-    SubscriptionLocator.findManagedSubscription
   ),
   getManagedGroupSubscriptions: promisify(
     SubscriptionLocator.getManagedGroupSubscriptions

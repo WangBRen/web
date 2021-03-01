@@ -20,9 +20,17 @@ const Path = require('path')
 const ProjectGetter = require('../../../app/src/Features/Project/ProjectGetter.js')
 
 const User = require('./helpers/User')
-const MockProjectHistoryApi = require('./helpers/MockProjectHistoryApi')
-const MockDocstoreApi = require('./helpers/MockDocstoreApi')
-const MockFileStoreApi = require('./helpers/MockFileStoreApi')
+const MockProjectHistoryApiClass = require('./mocks/MockProjectHistoryApi')
+const MockDocstoreApiClass = require('./mocks/MockDocstoreApi')
+const MockFilestoreApiClass = require('./mocks/MockFilestoreApi')
+
+let MockProjectHistoryApi, MockDocstoreApi, MockFilestoreApi
+
+before(function() {
+  MockProjectHistoryApi = MockProjectHistoryApiClass.instance()
+  MockDocstoreApi = MockDocstoreApiClass.instance()
+  MockFilestoreApi = MockFilestoreApiClass.instance()
+})
 
 describe('RestoringFiles', function() {
   beforeEach(function(done) {
@@ -99,7 +107,6 @@ describe('RestoringFiles', function() {
         )
         expect(restored_doc._id.toString()).to.equal(this.restored_doc_id)
         expect(this.doc._id).to.not.equal(this.restored_doc_id)
-        // console.log @doc_id, @restored_doc_id, MockDocstoreApi.docs[@project_id]
         expect(
           MockDocstoreApi.docs[this.project_id][this.restored_doc_id].lines
         ).to.deep.equal(
@@ -194,7 +201,7 @@ describe('RestoringFiles', function() {
             project.rootFolder[0].fileRefs,
             file => file.name === 'image.png'
           )
-          file = MockFileStoreApi.files[this.project_id][file._id]
+          file = MockFilestoreApi.files[this.project_id][file._id]
           expect(file.content).to.equal(this.pngData)
           return done()
         })

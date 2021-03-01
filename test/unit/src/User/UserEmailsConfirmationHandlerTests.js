@@ -35,7 +35,6 @@ describe('UserEmailsConfirmationHandler', function() {
         }),
         'logger-sharelatex': (this.logger = { log: sinon.stub() }),
         '../Security/OneTimeTokenHandler': (this.OneTimeTokenHandler = {}),
-        '../Errors/Errors': Errors,
         './UserUpdater': (this.UserUpdater = {}),
         './UserGetter': (this.UserGetter = {
           getUser: sinon.stub().yields(null, this.mockUser)
@@ -246,7 +245,6 @@ describe('UserEmailsConfirmationHandler', function() {
       })
 
       it('should call the callback with a NotFoundError', function() {
-        console.log(this.callback.lastCall.args)
         return this.callback
           .calledWith(sinon.match.instanceOf(Errors.NotFoundError))
           .should.equal(true)
