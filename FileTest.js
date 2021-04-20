@@ -1,4 +1,3 @@
-// import { createClient } from "webdav/web"
 const { createClient } = require("webdav");
  
 const client = createClient(
@@ -10,10 +9,10 @@ const client = createClient(
 );
  
 // Get directory contents
-async function test() {
-    console.log('test');
-    const directoryItems = await client.getDirectoryContents("/我的坚果云");
+async function getFile() {
+    console.log('Test');
+    const directoryItems = await client.getDirectoryContents("/");
     console.log(directoryItems)
 }
 
-test()
+getFile()

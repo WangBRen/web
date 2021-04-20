@@ -84,7 +84,6 @@ function initialize(webRouter, privateApiRouter, publicApiRouter) {
     AuthenticationController.addEndpointToLoginWhitelist('/register')
   }
   publicApiRouter.post('/register', UserController.register)
-
   EditorRouter.apply(webRouter, privateApiRouter)
   CollaboratorsRouter.apply(webRouter, privateApiRouter)
   SubscriptionRouter.apply(webRouter, privateApiRouter, publicApiRouter)
